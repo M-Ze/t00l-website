@@ -1,0 +1,15 @@
+# Local task notes
+
+# Local logs and runtime output
+*.log
+*.err.log
+dist/
+node_modules/
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+activate-venv.ps1
+start-preview.ps1
