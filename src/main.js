@@ -8,6 +8,7 @@ import "./styles.css";
 gsap.registerPlugin(ScrollTrigger);
 
 const LANGUAGE_STORAGE_KEY = "t00l-landing-language";
+const MOBILE_LAYOUT_QUERY = "(max-width: 760px)";
 const SNAP_DURATION_SECONDS = 0.72;
 const SNAP_DURATION_MS = SNAP_DURATION_SECONDS * 1000;
 const LOOP_START_DELAY_MS = 1000;
@@ -22,8 +23,10 @@ const state = {
   lenisTicker: null,
   snapLocked: false,
   pointerY: -1,
+  heroTitleTimeline: null,
   whatTimeline: null,
   demoTimeline: null,
+  moduleTimeline: null,
   loopStartTimer: null,
 };
 
@@ -137,6 +140,14 @@ function animatedWords(value, className) {
       return `<span class="${className}">${brandText(part)}</span>`;
     })
     .join("");
+}
+
+/**
+ * Returns true when the layout has switched to the stacked smartphone flow.
+ * @returns {boolean}
+ */
+function isMobileLayout() {
+  return window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
 }
 
 function githubIcon() {
@@ -312,7 +323,14 @@ function hero(localizedContent) {
     <div class="section-card hero-card">
       <section class="hero-copy" aria-labelledby="hero-title">
         <p class="eyebrow">${brandText(localizedContent.hero.eyebrow)}</p>
-        <h1 id="hero-title" class="hero-title hero-title-gradient">${animatedWords(localizedContent.hero.title, "hero-title-word")}</h1>
+        <h1 id="hero-title" class="hero-title hero-title-gradient" aria-label="${escapeAttribute(`${siteConfig.appName}: ${localizedContent.hero.title}`)}">
+          <span class="hero-title-layer is-active" data-hero-title="short" aria-hidden="true">
+            ${animatedWords(siteConfig.appName, "hero-title-word")}
+          </span>
+          <span class="hero-title-layer" data-hero-title="long" aria-hidden="true">
+            ${animatedWords(localizedContent.hero.title, "hero-title-word")}
+          </span>
+        </h1>
         <p class="lead">${brandText(localizedContent.hero.description)}</p>
         <div class="hero-actions">
           <a class="app-link primary app-link-glow" href="${siteConfig.appUrl}" target="_blank" rel="noopener noreferrer">
@@ -538,9 +556,17 @@ function resetAnimationState() {
     state.whatTimeline.kill();
     state.whatTimeline = null;
   }
+  if (state.heroTitleTimeline) {
+    state.heroTitleTimeline.kill();
+    state.heroTitleTimeline = null;
+  }
   if (state.demoTimeline) {
     state.demoTimeline.kill();
     state.demoTimeline = null;
+  }
+  if (state.moduleTimeline) {
+    state.moduleTimeline.kill();
+    state.moduleTimeline = null;
   }
   ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
   if (state.lenisTicker) {
@@ -562,6 +588,7 @@ function clearLoopStartTimer() {
 function pauseLoopTimelines() {
   state.whatTimeline?.pause(0);
   state.demoTimeline?.pause(0);
+  state.moduleTimeline?.pause(0);
 }
 
 function scheduleSectionLoopStart(sectionId, delayMs = LOOP_START_DELAY_MS) {
@@ -573,6 +600,8 @@ function scheduleSectionLoopStart(sectionId, delayMs = LOOP_START_DELAY_MS) {
       state.whatTimeline?.restart(true);
     } else if (sectionId === "volumina") {
       state.demoTimeline?.restart(true);
+    } else if (sectionId === "modules") {
+      state.moduleTimeline?.restart(true);
     }
   }, delayMs);
 }
@@ -741,6 +770,108 @@ function typeMarkedValue(code, template, oldValue, newValue, duration) {
   });
 }
 
+function setActiveHeroTitleLayer(activeLayer, inactiveLayer) {
+  activeLayer.classList.add("is-active");
+  inactiveLayer.classList.remove("is-active");
+}
+
+function installHeroTitleLoop() {
+  const shortLayer = document.querySelector('[data-hero-title="short"]');
+  const longLayer = document.querySelector('[data-hero-title="long"]');
+  if (!shortLayer || !longLayer) return;
+  const shortWords = shortLayer.querySelectorAll(".hero-title-word");
+  const longWords = longLayer.querySelectorAll(".hero-title-word");
+  gsap.set(shortLayer, { autoAlpha: 1 });
+  gsap.set(longLayer, { autoAlpha: 0 });
+  gsap.set(shortWords, { autoAlpha: 0, yPercent: 18, scale: 0.72, filter: "blur(10px)", clipPath: "inset(100% 0% 0% 0%)" });
+  gsap.set(longWords, { autoAlpha: 0, yPercent: 82, filter: "blur(9px)", clipPath: "inset(100% 0% 0% 0%)" });
+
+  state.heroTitleTimeline = gsap.timeline();
+  const titleLoop = gsap.timeline({ repeat: -1 });
+
+  titleLoop
+    .to(shortWords, {
+      autoAlpha: 0,
+      yPercent: -78,
+      scale: 0.94,
+      filter: "blur(8px)",
+      clipPath: "inset(0% 0% 100% 0%)",
+      stagger: 0.045,
+      duration: 0.34,
+      ease: "power2.in",
+    })
+    .set(shortLayer, { autoAlpha: 0 })
+    .set(longLayer, { autoAlpha: 1 })
+    .call(() => setActiveHeroTitleLayer(longLayer, shortLayer))
+    .fromTo(longWords, {
+      autoAlpha: 0,
+      yPercent: 82,
+      filter: "blur(9px)",
+      clipPath: "inset(100% 0% 0% 0%)",
+    }, {
+      autoAlpha: 1,
+      yPercent: 0,
+      filter: "blur(0px)",
+      clipPath: "inset(0% 0% 0% 0%)",
+      stagger: 0.052,
+      duration: 0.58,
+      ease: "back.out(1.18)",
+    })
+    .to({}, { duration: 3 })
+    .to(longWords, {
+      autoAlpha: 0,
+      yPercent: -62,
+      filter: "blur(8px)",
+      clipPath: "inset(0% 0% 100% 0%)",
+      stagger: 0.035,
+      duration: 0.32,
+      ease: "power2.in",
+    })
+    .set(longLayer, { autoAlpha: 0 })
+    .set(shortLayer, { autoAlpha: 1 })
+    .call(() => setActiveHeroTitleLayer(shortLayer, longLayer))
+    .fromTo(shortWords, {
+      autoAlpha: 0,
+      yPercent: 75,
+      scale: 0.82,
+      filter: "blur(8px)",
+      clipPath: "inset(100% 0% 0% 0%)",
+    }, {
+      autoAlpha: 1,
+      yPercent: 0,
+      scale: 1,
+      filter: "blur(0px)",
+      clipPath: "inset(0% 0% 0% 0%)",
+      stagger: 0.04,
+      duration: 0.5,
+      ease: "back.out(1.24)",
+    })
+    .to({}, { duration: 3 });
+
+  state.heroTitleTimeline
+    .to(shortWords, {
+      autoAlpha: 1,
+      yPercent: 0,
+      scale: 1,
+      filter: "blur(0px)",
+      clipPath: "inset(0% 0% 0% 0%)",
+      stagger: 0.045,
+      duration: 0.9,
+      ease: "back.out(1.35)",
+    })
+    .to({}, { duration: 2.35 })
+    .add(titleLoop);
+}
+
+function showReducedMotionHeroTitle() {
+  const shortLayer = document.querySelector('[data-hero-title="short"]');
+  const longLayer = document.querySelector('[data-hero-title="long"]');
+  if (!shortLayer || !longLayer) return;
+  setActiveHeroTitleLayer(longLayer, shortLayer);
+  gsap.set(shortLayer, { autoAlpha: 0 });
+  gsap.set(longLayer, { autoAlpha: 1 });
+}
+
 function setWhatTitle(title) {
   const titleElement = document.querySelector(".what-dynamic-title");
   if (!titleElement) return;
@@ -783,34 +914,121 @@ function buildWhatWorkflowTimeline() {
   if (!workflow) return null;
   const inputEditor = workflow.querySelector(".workflow-input-editor");
   const outputEditor = workflow.querySelector(".workflow-output-editor");
+  const core = workflow.querySelector(".workflow-core");
   const logo = workflow.querySelector(".workflow-logo");
   const lines = workflow.querySelectorAll(".workflow-line");
   const inputCode = workflow.querySelector(".workflow-input-editor .typing-code");
   const outputCode = workflow.querySelector(".workflow-output-editor .typing-code");
   const steps = localizedContent.what.steps;
   const scenario = localizedContent.what.workflows[0];
-  if (!inputEditor || !outputEditor || !logo || !inputCode || !outputCode) return null;
+  if (!inputEditor || !outputEditor || !core || !logo || !inputCode || !outputCode) return null;
 
   resetWorkflowVisuals(scenario);
   gsap.set([inputEditor, outputEditor], { autoAlpha: 0, y: 18 });
+  gsap.set(core, { autoAlpha: isMobileLayout() ? 0 : 1, y: 0 });
   gsap.set(logo, { autoAlpha: 0, scale: 0.78, rotation: -8 });
   gsap.set(lines, { scaleX: 0, transformOrigin: "50% 50%" });
   const adjustedInputCode = scenario.adjustedInputCode || scenario.inputCode;
   const oldValue = scenario.highlightOldValue || "42.0";
   const newValue = scenario.highlightNewValue || "86.5";
-  const timeline = gsap.timeline({ paused: true, repeat: -1, repeatDelay: 0.9 });
+  const timing = {
+    repeatDelay: 1.45,
+    editorReveal: 0.52,
+    inputType: 1.75,
+    afterInput: 0.78,
+    selectValue: 0.54,
+    afterSelect: 0.6,
+    valueType: 1.16,
+    afterValue: 0.58,
+    beforeCalculate: 0.42,
+    lineDraw: 0.42,
+    logoEnter: 0.62,
+    logoSettle: 0.26,
+    outputReveal: 0.5,
+    outputType: 1.68,
+    selectOutput: 0.58,
+    afterOutputSelect: 0.72,
+    endHold: 1.3,
+  };
+  if (isMobileLayout()) {
+    return gsap.timeline({ paused: true, repeat: -1, repeatDelay: 0.8 })
+      .call(() => {
+        resetWorkflowVisuals(scenario);
+        setWhatTitle(localizedContent.what.restoredTitle);
+        gsap.set([inputEditor, outputEditor], { autoAlpha: 0, y: 18, scale: 0.98 });
+        gsap.set(core, { autoAlpha: 0, y: 12, scale: 0.96 });
+        gsap.set(logo, { autoAlpha: 0, scale: 0.72, rotation: -8 });
+        gsap.set(lines, { scaleX: 0, transformOrigin: "50% 50%" });
+      })
+      .call(() => setActiveWorkflowStep(0, steps[0].title))
+      .to(inputEditor, { autoAlpha: 1, y: 0, scale: 1, duration: 0.48, ease: "power3.out" })
+      .add(typeCodeText(inputCode, scenario.inputCode, 1.36))
+      .to({}, { duration: 0.55 })
+      .call(() => setActiveWorkflowStep(1, steps[1].title))
+      .call(() => {
+        inputCode.innerHTML = codeWithMarkedValue(scenario.inputCode, oldValue);
+      })
+      .call(() => {
+        const selection = inputEditor.querySelector(".code-selection");
+        if (selection) {
+          gsap.to(selection, {
+            duration: 0.42,
+            backgroundColor: "rgba(3, 155, 229, 0.34)",
+            ease: "power2.out",
+          });
+        }
+      })
+      .to({}, { duration: 0.34 })
+      .add(typeMarkedValue(inputCode, scenario.inputCode, oldValue, newValue, 0.92))
+      .call(() => {
+        inputCode.textContent = adjustedInputCode;
+      })
+      .to({}, { duration: 0.72 })
+      .to(inputEditor, { autoAlpha: 0, y: -12, scale: 0.98, duration: 0.34, ease: "power2.in" })
+      .call(() => setActiveWorkflowStep(2, steps[2].title))
+      .to(core, { autoAlpha: 1, y: 0, scale: 1, duration: 0.36, ease: "power3.out" })
+      .to(logo, { autoAlpha: 1, scale: 1.16, rotation: 0, duration: 0.58, ease: "back.out(1.85)" }, "-=0.12")
+      .to(logo, { scale: 1, duration: 0.22, ease: "power2.out" })
+      .to({}, { duration: 0.76 })
+      .to(core, { autoAlpha: 0, y: -10, scale: 0.96, duration: 0.32, ease: "power2.in" })
+      .call(() => setActiveWorkflowStep(3, steps[3].title))
+      .to(outputEditor, { autoAlpha: 1, y: 0, scale: 1, duration: 0.48, ease: "power3.out" })
+      .add(typeCodeText(outputCode, scenario.outputCode, 1.32))
+      .call(() => {
+        outputCode.innerHTML = selectedCodeBlock(scenario.outputCode);
+      })
+      .call(() => {
+        const selection = outputEditor.querySelector(".code-selection-block");
+        if (selection) {
+          gsap.to(selection, {
+            duration: 0.46,
+            backgroundColor: "rgba(3, 155, 229, 0.26)",
+            ease: "power2.out",
+          });
+        }
+      })
+      .to({}, { duration: 1.0 })
+      .to(outputEditor, { autoAlpha: 0, y: -12, scale: 0.98, duration: 0.34, ease: "power2.in" })
+      .call(() => {
+        document.querySelectorAll(".workflow-step").forEach((step) => step.classList.remove("is-active"));
+        setWhatTitle(localizedContent.what.restoredTitle);
+      });
+  }
+
+  const timeline = gsap.timeline({ paused: true, repeat: -1, repeatDelay: timing.repeatDelay });
   timeline
     .call(() => {
       resetWorkflowVisuals(scenario);
       setWhatTitle(localizedContent.what.restoredTitle);
       gsap.set([inputEditor, outputEditor], { autoAlpha: 0, y: 18 });
+      gsap.set(core, { autoAlpha: 1, y: 0, scale: 1 });
       gsap.set(logo, { autoAlpha: 0, scale: 0.78, rotation: -8 });
       gsap.set(lines, { scaleX: 0, transformOrigin: "50% 50%" });
     })
     .call(() => setActiveWorkflowStep(0, steps[0].title))
-    .to(inputEditor, { autoAlpha: 1, y: 0, duration: 0.36, ease: "power3.out" })
-    .add(typeCodeText(inputCode, scenario.inputCode, 1.05))
-    .to({}, { duration: 0.28 })
+    .to(inputEditor, { autoAlpha: 1, y: 0, duration: timing.editorReveal, ease: "power3.out" })
+    .add(typeCodeText(inputCode, scenario.inputCode, timing.inputType))
+    .to({}, { duration: timing.afterInput })
     .call(() => setActiveWorkflowStep(1, steps[1].title))
     .call(() => {
       inputCode.innerHTML = codeWithMarkedValue(scenario.inputCode, oldValue);
@@ -819,36 +1037,36 @@ function buildWhatWorkflowTimeline() {
       const selection = inputEditor.querySelector(".code-selection");
       if (selection) {
         gsap.to(selection, {
-          duration: 0.34,
+          duration: timing.selectValue,
           backgroundColor: "rgba(3, 155, 229, 0.34)",
           ease: "power2.out",
         });
       }
     })
-    .to({}, { duration: 0.34 })
-    .add(typeMarkedValue(inputCode, scenario.inputCode, oldValue, newValue, 0.66))
+    .to({}, { duration: timing.afterSelect })
+    .add(typeMarkedValue(inputCode, scenario.inputCode, oldValue, newValue, timing.valueType))
     .call(() => {
       const selection = inputEditor.querySelector(".code-selection");
       if (selection) {
         gsap.to(selection, {
-          duration: 0.32,
+          duration: timing.afterValue,
           backgroundColor: "rgba(3, 155, 229, 0.18)",
           ease: "power2.out",
         });
       }
     })
-    .to({}, { duration: 0.32 })
+    .to({}, { duration: timing.afterValue })
     .call(() => {
       inputCode.textContent = adjustedInputCode;
     })
-    .to({}, { duration: 0.22 })
+    .to({}, { duration: timing.beforeCalculate })
     .call(() => setActiveWorkflowStep(2, steps[2].title))
-    .to(".workflow-line-left", { scaleX: 1, duration: 0.28, ease: "power2.out" })
-    .to(logo, { autoAlpha: 1, scale: 1.14, rotation: 0, duration: 0.38, ease: "back.out(1.75)" }, "-=0.04")
-    .to(logo, { scale: 1, duration: 0.16, ease: "power2.out" })
-    .to(".workflow-line-right", { scaleX: 1, duration: 0.28, ease: "power2.out" }, "-=0.08")
-    .to(outputEditor, { autoAlpha: 1, y: 0, duration: 0.34, ease: "power3.out" }, "-=0.02")
-    .add(typeCodeText(outputCode, scenario.outputCode, 0.94), "-=0.02")
+    .to(".workflow-line-left", { scaleX: 1, duration: timing.lineDraw, ease: "power2.out" })
+    .to(logo, { autoAlpha: 1, scale: 1.16, rotation: 0, duration: timing.logoEnter, ease: "back.out(1.75)" }, "-=0.08")
+    .to(logo, { scale: 1, duration: timing.logoSettle, ease: "power2.out" })
+    .to(".workflow-line-right", { scaleX: 1, duration: timing.lineDraw, ease: "power2.out" }, "-=0.1")
+    .to(outputEditor, { autoAlpha: 1, y: 0, duration: timing.outputReveal, ease: "power3.out" }, "-=0.02")
+    .add(typeCodeText(outputCode, scenario.outputCode, timing.outputType), "-=0.02")
     .call(() => setActiveWorkflowStep(3, steps[3].title))
     .call(() => {
       outputCode.innerHTML = selectedCodeBlock(scenario.outputCode);
@@ -857,14 +1075,14 @@ function buildWhatWorkflowTimeline() {
       const selection = outputEditor.querySelector(".code-selection-block");
       if (selection) {
         gsap.to(selection, {
-          duration: 0.36,
+          duration: timing.selectOutput,
           backgroundColor: "rgba(3, 155, 229, 0.26)",
           ease: "power2.out",
         });
       }
     })
-    .to({}, { duration: 0.36 })
-    .to({}, { duration: 0.74 })
+    .to({}, { duration: timing.afterOutputSelect })
+    .to({}, { duration: timing.endHold })
     .call(() => {
       document.querySelectorAll(".workflow-step").forEach((step) => step.classList.remove("is-active"));
       setWhatTitle(localizedContent.what.restoredTitle);
@@ -904,7 +1122,9 @@ function installWhatWorkflowAnimation() {
 
 function playSectionCardAnimation(card) {
   if (reducedMotion.matches) return;
-  const titleWords = card.querySelectorAll(".section-title-word, .hero-title-word");
+  const titleWords = card.classList.contains("hero-card")
+    ? []
+    : card.querySelectorAll(".section-title-word");
   const description = card.querySelector(".section-description, .lead");
   const panels = card.querySelectorAll(".workflow-editor, .workflow-core, .workflow-step, .code-panel, .profile-panel, .result-panel, .module-card");
   const timeline = gsap.timeline({ defaults: { ease: "power3.out" } });
@@ -969,28 +1189,58 @@ function buildDemoTimeline() {
   const outputPanel = demoCard.querySelector(".result-panel");
   const inputCode = demoCard.querySelector(".demo-input-code");
   const outputCode = demoCard.querySelector(".demo-output-code");
+  const profileOutline = demoCard.querySelector(".profile-outline");
+  const profileFillMask = demoCard.querySelector(".profile-fill-mask");
   const inputText = inputCode?.dataset.code || "";
   const outputText = outputCode?.dataset.code || "";
-  if (!inputPanel || !profilePanel || !outputPanel || !inputCode || !outputCode) return null;
+  if (!inputPanel || !profilePanel || !outputPanel || !inputCode || !outputCode || !profileOutline || !profileFillMask) return null;
 
   inputCode.textContent = "";
   outputCode.textContent = "";
   gsap.set([inputPanel, profilePanel, outputPanel], { autoAlpha: 0, y: 18 });
-  gsap.set(".profile-outline", { strokeDasharray: 1200, strokeDashoffset: 1200 });
-  gsap.set(".profile-fill-mask", { attr: { y: 292, height: 0 } });
+  gsap.set(profileOutline, { strokeDasharray: 1200, strokeDashoffset: 1200 });
+  gsap.set(profileFillMask, { attr: { y: 292, height: 0 } });
+  if (isMobileLayout()) {
+    return gsap.timeline({ paused: true, repeat: -1, repeatDelay: 0.55 })
+      .call(() => {
+        inputCode.textContent = "";
+        outputCode.textContent = "";
+        gsap.set([inputPanel, profilePanel, outputPanel], { autoAlpha: 0, y: 18, scale: 0.98 });
+        gsap.set(profileOutline, { strokeDasharray: 1200, strokeDashoffset: 1200 });
+        gsap.set(profileFillMask, { attr: { y: 292, height: 0 } });
+      })
+      .to(inputPanel, { autoAlpha: 1, y: 0, scale: 1, duration: 0.44, ease: "power3.out" })
+      .add(typeCodeText(inputCode, inputText, 1.08))
+      .to({}, { duration: 0.72 })
+      .to(inputPanel, { autoAlpha: 0, y: -12, scale: 0.98, duration: 0.32, ease: "power2.in" })
+      .to(profilePanel, { autoAlpha: 1, y: 0, scale: 1, duration: 0.46, ease: "power3.out" })
+      .to(profileOutline, { strokeDashoffset: 0, duration: 0.92, ease: "power2.inOut" })
+      .to(profileFillMask, {
+        attr: { y: 145.8, height: 146.2 },
+        duration: 0.86,
+        ease: "power2.out",
+      }, "-=0.34")
+      .to({}, { duration: 0.76 })
+      .to(profilePanel, { autoAlpha: 0, y: -12, scale: 0.98, duration: 0.32, ease: "power2.in" })
+      .to(outputPanel, { autoAlpha: 1, y: 0, scale: 1, duration: 0.44, ease: "power3.out" })
+      .add(typeCodeText(outputCode, outputText, 1.08))
+      .to({}, { duration: 1.05 })
+      .to(outputPanel, { autoAlpha: 0, y: -12, scale: 0.98, duration: 0.32, ease: "power2.in" });
+  }
+
   return gsap.timeline({ paused: true, repeat: -1, repeatDelay: 0.95 })
     .call(() => {
       inputCode.textContent = "";
       outputCode.textContent = "";
       gsap.set([inputPanel, profilePanel, outputPanel], { autoAlpha: 0, y: 18 });
-      gsap.set(".profile-outline", { strokeDasharray: 1200, strokeDashoffset: 1200 });
-      gsap.set(".profile-fill-mask", { attr: { y: 292, height: 0 } });
+      gsap.set(profileOutline, { strokeDasharray: 1200, strokeDashoffset: 1200 });
+      gsap.set(profileFillMask, { attr: { y: 292, height: 0 } });
     })
     .to(inputPanel, { autoAlpha: 1, y: 0, duration: 0.34, ease: "power3.out" })
     .add(typeCodeText(inputCode, inputText, 0.95))
     .to(profilePanel, { autoAlpha: 1, y: 0, duration: 0.34, ease: "power3.out" }, "+=0.08")
-    .to(".profile-outline", { strokeDashoffset: 0, duration: 0.86, ease: "power2.inOut" })
-    .to(".profile-fill-mask", {
+    .to(profileOutline, { strokeDashoffset: 0, duration: 0.86, ease: "power2.inOut" })
+    .to(profileFillMask, {
       attr: { y: 145.8, height: 146.2 },
       duration: 0.82,
       ease: "power2.out",
@@ -1034,12 +1284,67 @@ function installDemoLoopAnimation() {
 function installModuleAnimation() {
   const moduleCard = document.querySelector(".modules-card");
   if (!moduleCard || reducedMotion.matches) return;
+  state.moduleTimeline = buildModuleTimeline();
   ScrollTrigger.create({
     trigger: moduleCard,
     start: "top 76%",
-    onEnter: playModuleAnimation,
-    onEnterBack: playModuleAnimation,
+    end: "bottom 24%",
+    onEnter: () => {
+      if (state.moduleTimeline) {
+        state.moduleTimeline.restart(true);
+      } else {
+        playModuleAnimation();
+      }
+    },
+    onEnterBack: () => {
+      if (state.moduleTimeline) {
+        state.moduleTimeline.restart(true);
+      } else {
+        playModuleAnimation();
+      }
+    },
+    onLeave: () => state.moduleTimeline?.pause(0),
+    onLeaveBack: () => state.moduleTimeline?.pause(0),
   });
+}
+
+function buildModuleTimeline() {
+  if (!isMobileLayout()) return null;
+  const moduleCard = document.querySelector(".modules-card");
+  const cards = [...document.querySelectorAll(".module-card")];
+  const sparks = document.querySelectorAll(".module-spark span");
+  if (!moduleCard || cards.length === 0) return null;
+  gsap.set(cards, { autoAlpha: 0, y: 18, scale: 0.97, rotateX: 0 });
+  gsap.set(sparks, { scale: 0.82, opacity: 0.34, rotation: -14 });
+  const timeline = gsap.timeline({ paused: true, repeat: -1, repeatDelay: 0.35 });
+  timeline
+    .to(sparks, {
+      scale: 1,
+      opacity: 0.58,
+      rotation: 0,
+      duration: 0.52,
+      stagger: 0.08,
+      ease: "back.out(1.6)",
+    }, 0);
+  cards.forEach((card, index) => {
+    timeline
+      .to(card, {
+        autoAlpha: 1,
+        y: 0,
+        scale: 1,
+        duration: 0.42,
+        ease: "power3.out",
+      }, index === 0 ? ">+=0.08" : ">-0.1")
+      .to({}, { duration: 1.35 })
+      .to(card, {
+        autoAlpha: 0,
+        y: -12,
+        scale: 0.97,
+        duration: 0.32,
+        ease: "power2.in",
+      });
+  });
+  return timeline;
 }
 
 function playModuleAnimation() {
@@ -1074,6 +1379,7 @@ function runAnimations() {
   if (reducedMotion.matches) {
     const firstWorkflow = content[state.language].what.workflows[0];
     const demoContent = content[state.language].demo;
+    showReducedMotionHeroTitle();
     document.querySelector(".workflow-input-editor .typing-code").textContent = firstWorkflow.adjustedInputCode || firstWorkflow.inputCode;
     document.querySelector(".workflow-output-editor .typing-code").textContent = firstWorkflow.outputCode;
     document.querySelector(".demo-input-code").textContent = demoContent.inputCode;
@@ -1107,6 +1413,7 @@ function runAnimations() {
     ease: "none",
     scrollTrigger: { trigger: document.body, start: "top top", end: "bottom bottom", scrub: true },
   });
+  installHeroTitleLoop();
   installReplayCardAnimations();
   installWhatWorkflowAnimation();
   installDemoLoopAnimation();

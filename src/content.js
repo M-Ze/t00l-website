@@ -12,7 +12,7 @@ export const content = {
       language: "Sprache wechseln",
     },
     hero: {
-      eyebrow: "T00L: Textfiles. Modular. Erweiterbar gedacht.",
+      eyebrow: "Textfiles. Modular. Erweiterbar gedacht.",
       title: "einfache Oberfläche, standardisierte Berechnungen.",
       description:
         "T00L arbeitet mit lesbaren TXT/TOML-Dateien statt schwerfälliger Bedienoberflächen/GUI.",
@@ -136,10 +136,10 @@ profile = "traceable"`,
       language: "Switch language",
     },
     hero: {
-      eyebrow: "T00L: Text files. Modular. Built to expand.",
+      eyebrow: "Text files. Modular. Built to expand.",
       title: "simple interface, standardized calculations.",
       description:
-        "T00L works with readable TXT/TOML files instead of heavy user interfaces.",
+        "T00L works with readable TXT/TOML files instead of heavyweight user interfaces/GUI.",
       primary: "Open app",
       secondary: "What is T00L?",
       warmupPreparing: "Starting the app in the background",
@@ -149,7 +149,7 @@ profile = "traceable"`,
     what: {
       label: "What is T00L?",
       title: "Text files. Processing. Calculation.",
-      restoredTitle: "Text files in. Calculation out.",
+      restoredTitle: "Text files. Processing. Calculation.",
       body:
         "A simple interface guides the workflow while modules encapsulate the calculation.",
       inputTitle: "Input",
