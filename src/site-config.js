@@ -9,7 +9,7 @@ export const siteConfig = {
   githubUrl: "https://github.com/M-Ze",
   email: "web.application.t00l@gmail.com",
   copyright: "Copyright © 2026 T00L by MZe",
-  versionLabel: "Landingpage 1.1",
+  versionLabel: "Landingpage 1.2",
   renderWarmupEnabled: true,
   themeStorageKey: "t00l-landing-theme",
   analyticsEnabled: false,

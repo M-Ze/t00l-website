@@ -1,17 +1,14 @@
-import Lenis from "lenis";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { initAnimations } from "./animations/index.js";
+import { gsap, ScrollTrigger } from "./services/gsap.js";
+import { destroyScroll, initScroll, scrollToPosition } from "./services/scroll.js";
 import { siteConfig } from "./site-config.js";
 import { content } from "./content.js";
 import "./styles.css";
 
-gsap.registerPlugin(ScrollTrigger);
-
 const LANGUAGE_STORAGE_KEY = "t00l-landing-language";
-const MOBILE_LAYOUT_QUERY = "(max-width: 760px)";
+const COMPACT_ANIMATION_QUERY = "(max-width: 560px)";
 const SNAP_DURATION_SECONDS = 0.72;
 const SNAP_DURATION_MS = SNAP_DURATION_SECONDS * 1000;
-const LOOP_START_DELAY_MS = 1000;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const app = document.querySelector("#app");
 const state = {
@@ -19,15 +16,9 @@ const state = {
   theme: initialTheme(),
   warmup: "idle",
   eventController: null,
-  lenis: null,
-  lenisTicker: null,
+  animationCleanup: null,
   snapLocked: false,
   pointerY: -1,
-  heroTitleTimeline: null,
-  whatTimeline: null,
-  demoTimeline: null,
-  moduleTimeline: null,
-  loopStartTimer: null,
 };
 
 if ("scrollRestoration" in window.history) {
@@ -87,37 +78,6 @@ function escapeAttribute(value) {
 }
 
 /**
- * Escapes a literal string so it can be used in a regular expression.
- * @param {string} value Literal text to escape.
- * @returns {string}
- */
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-/**
- * Renders code text while wrapping the first matching value in a selection span.
- * @param {string} codeText Full code text.
- * @param {string} value Value to mark.
- * @param {string} className Selection class.
- * @returns {string}
- */
-function codeWithMarkedValue(codeText, value, className = "code-selection") {
-  if (!value) return escapeHtml(codeText);
-  const marker = new RegExp(escapeRegExp(value), "u");
-  return escapeHtml(codeText).replace(marker, `<span class="${className}">${escapeHtml(value)}</span>`);
-}
-
-/**
- * Renders a code block as a single selected text range.
- * @param {string} codeText Full code text.
- * @returns {string}
- */
-function selectedCodeBlock(codeText) {
-  return `<span class="code-selection-block">${escapeHtml(codeText)}</span>`;
-}
-
-/**
  * Marks the product name with the code-font branding style.
  * @param {string} value Trusted localized text.
  * @returns {string}
@@ -143,11 +103,11 @@ function animatedWords(value, className) {
 }
 
 /**
- * Returns true when the layout has switched to the stacked smartphone flow.
+ * Returns true when tile groups need the compact overlaid animation flow.
  * @returns {boolean}
  */
 function isMobileLayout() {
-  return window.matchMedia(MOBILE_LAYOUT_QUERY).matches;
+  return window.matchMedia(COMPACT_ANIMATION_QUERY).matches;
 }
 
 function githubIcon() {
@@ -216,7 +176,7 @@ function render(options = {}) {
   if (options.targetSectionId && !options.resetPosition) {
     jumpToSection(options.targetSectionId);
   }
-  runAnimations();
+  runAnimations(localizedContent);
   updateScrollControls();
   if (options.resetPosition) {
     resetPagePosition();
@@ -320,7 +280,7 @@ function hero(localizedContent) {
   element.id = "top";
   element.className = "hero landing-section";
   element.innerHTML = `
-    <div class="section-card hero-card">
+    <div class="section-card hero-card" data-snap-card data-animation-key="hero">
       <section class="hero-copy" aria-labelledby="hero-title">
         <p class="eyebrow">${brandText(localizedContent.hero.eyebrow)}</p>
         <h1 id="hero-title" class="hero-title hero-title-text" aria-label="${escapeAttribute(`${siteConfig.appName}: ${localizedContent.hero.title}`)}">
@@ -360,7 +320,7 @@ function whatSection(localizedContent) {
     .join("");
   const firstWorkflow = localizedContent.what.workflows[0];
   section.innerHTML = `
-    <div class="section-card what-card">
+    <div class="section-card what-card" data-snap-card data-animation-key="what">
       <div class="section-heading">
         <p class="eyebrow">${brandText(localizedContent.what.label)}</p>
         <h2 class="section-title what-dynamic-title" aria-live="polite">${animatedWords(localizedContent.what.title, "section-title-word")}</h2>
@@ -402,7 +362,7 @@ function voluminaDemo(localizedContent) {
   const inputCode = localizedContent.demo.inputCode;
   const outputCode = localizedContent.demo.outputCode;
   section.innerHTML = `
-    <div class="section-card demo-card">
+    <div class="section-card demo-card" data-snap-card data-animation-key="volumina">
       <div class="section-heading">
         <p class="eyebrow">${brandText(localizedContent.demo.label)}</p>
         <h2 class="section-title">${animatedWords(localizedContent.demo.title, "section-title-word")}</h2>
@@ -451,7 +411,7 @@ function modules(localizedContent) {
     .map((card) => `<li class="module-card">${brandText(card)}</li>`)
     .join("");
   section.innerHTML = `
-    <div class="section-card modules-card">
+    <div class="section-card modules-card" data-snap-card data-animation-key="modules">
       <div class="module-spark" aria-hidden="true">
         <span></span><span></span><span></span>
       </div>
@@ -551,59 +511,13 @@ function resetPagePosition() {
 }
 
 function resetAnimationState() {
-  clearLoopStartTimer();
-  if (state.whatTimeline) {
-    state.whatTimeline.kill();
-    state.whatTimeline = null;
-  }
-  if (state.heroTitleTimeline) {
-    state.heroTitleTimeline.kill();
-    state.heroTitleTimeline = null;
-  }
-  if (state.demoTimeline) {
-    state.demoTimeline.kill();
-    state.demoTimeline = null;
-  }
-  if (state.moduleTimeline) {
-    state.moduleTimeline.kill();
-    state.moduleTimeline = null;
+  if (state.animationCleanup) {
+    state.animationCleanup();
+    state.animationCleanup = null;
   }
   ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
-  if (state.lenisTicker) {
-    gsap.ticker.remove(state.lenisTicker);
-    state.lenisTicker = null;
-  }
-  if (state.lenis) {
-    state.lenis.destroy();
-    state.lenis = null;
-  }
-}
-
-function clearLoopStartTimer() {
-  if (!state.loopStartTimer) return;
-  window.clearTimeout(state.loopStartTimer);
-  state.loopStartTimer = null;
-}
-
-function pauseLoopTimelines() {
-  state.whatTimeline?.pause(0);
-  state.demoTimeline?.pause(0);
-  state.moduleTimeline?.pause(0);
-}
-
-function scheduleSectionLoopStart(sectionId, delayMs = LOOP_START_DELAY_MS) {
-  clearLoopStartTimer();
-  pauseLoopTimelines();
-  if (!sectionId || reducedMotion.matches) return;
-  state.loopStartTimer = window.setTimeout(() => {
-    if (sectionId === "what") {
-      state.whatTimeline?.restart(true);
-    } else if (sectionId === "volumina") {
-      state.demoTimeline?.restart(true);
-    } else if (sectionId === "modules") {
-      state.moduleTimeline?.restart(true);
-    }
-  }, delayMs);
+  gsap.killTweensOf(".scroll-control");
+  destroyScroll();
 }
 
 function updateWarmupStatus() {
@@ -644,22 +558,33 @@ function scrollToTarget(target) {
   window.setTimeout(() => {
     state.snapLocked = false;
   }, reducedMotion.matches ? 260 : SNAP_DURATION_MS + 120);
-  if (state.lenis) {
-    state.lenis.scrollTo(top, { duration: SNAP_DURATION_SECONDS, easing: (value) => 1 - Math.pow(1 - value, 3) });
-  } else {
-    window.scrollTo({ top, behavior: "smooth" });
-  }
-  scheduleSectionLoopStart(target.id, SNAP_DURATION_MS + LOOP_START_DELAY_MS);
+  scrollToPosition(top, {
+    duration: SNAP_DURATION_SECONDS,
+    immediate: reducedMotion.matches,
+  });
 }
 
 function targetScrollPosition(target) {
-  if (target.id === "top") return 0;
   if (target.id === "footer") {
     return Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
   }
+  const snapCard = snapCardForTarget(target);
+  if (!snapCard) return 0;
+  const rect = snapCard.getBoundingClientRect();
+  const absoluteTop = window.scrollY + rect.top;
   const headerHeight = document.querySelector(".site-header")?.getBoundingClientRect().height || 0;
-  const offset = headerHeight > 90 ? Math.min(58, headerHeight * 0.45) : 0;
-  return Math.max(0, target.offsetTop - offset);
+  const usableViewportCenter = headerHeight + Math.max(0, window.innerHeight - headerHeight) / 2;
+  return clampScrollPosition(absoluteTop + rect.height / 2 - usableViewportCenter);
+}
+
+function snapCardForTarget(target) {
+  if (target.matches?.("[data-snap-card]")) return target;
+  return target.querySelector?.("[data-snap-card]") || target;
+}
+
+function clampScrollPosition(top) {
+  const maxScroll = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  return Math.min(Math.max(0, top), maxScroll);
 }
 
 function jumpToSection(sectionId) {
@@ -667,8 +592,8 @@ function jumpToSection(sectionId) {
   if (!target) return;
   const jump = () => {
     const top = targetScrollPosition(target);
-    if (state.lenis) state.lenis.scrollTo(top, { immediate: true });
-    window.scrollTo(0, targetScrollPosition(target));
+    scrollToPosition(top, { immediate: true });
+    window.scrollTo(0, top);
     updateScrollControls();
     ScrollTrigger.refresh();
   };
@@ -677,7 +602,6 @@ function jumpToSection(sectionId) {
     window.requestAnimationFrame(jump);
     window.setTimeout(jump, 120);
   });
-  scheduleSectionLoopStart(sectionId, LOOP_START_DELAY_MS);
 }
 
 function scrollToAdjacentSection(direction) {
@@ -735,675 +659,21 @@ function setScrollControlState(button, available, near, direction) {
   });
 }
 
-function typeCodeText(code, text, duration) {
-  const cursor = { index: 0 };
-  return gsap.fromTo(cursor, { index: 0 }, {
-    index: text.length,
-    duration,
-    ease: "none",
-    onStart() {
-      code.textContent = "";
-    },
-    onUpdate() {
-      code.textContent = text.slice(0, Math.round(cursor.index));
-    },
-    onComplete() {
-      code.textContent = text;
-    },
-  });
-}
-
-function typeMarkedValue(code, template, oldValue, newValue, duration) {
-  const cursor = { index: 0 };
-  return gsap.fromTo(cursor, { index: 0 }, {
-    index: newValue.length,
-    duration,
-    ease: "none",
-    onUpdate() {
-      const nextValue = newValue.slice(0, Math.round(cursor.index));
-      const nextCode = template.replace(oldValue, nextValue);
-      code.innerHTML = codeWithMarkedValue(nextCode, nextValue, "code-selection is-typing");
-    },
-    onComplete() {
-      code.innerHTML = codeWithMarkedValue(template.replace(oldValue, newValue), newValue);
-    },
-  });
-}
-
-function setActiveHeroTitleLayer(activeLayer, inactiveLayer) {
-  activeLayer.classList.add("is-active");
-  inactiveLayer.classList.remove("is-active");
-}
-
-function installHeroTitleLoop() {
-  const shortLayer = document.querySelector('[data-hero-title="short"]');
-  const longLayer = document.querySelector('[data-hero-title="long"]');
-  if (!shortLayer || !longLayer) return;
-  const shortWords = shortLayer.querySelectorAll(".hero-title-word");
-  const longWords = longLayer.querySelectorAll(".hero-title-word");
-  gsap.set(shortLayer, { autoAlpha: 1 });
-  gsap.set(longLayer, { autoAlpha: 0 });
-  gsap.set(shortWords, { autoAlpha: 0, yPercent: 18, scale: 0.72, clipPath: "inset(100% 0% 0% 0%)" });
-  gsap.set(longWords, { autoAlpha: 0, yPercent: 82, clipPath: "inset(100% 0% 0% 0%)" });
-
-  state.heroTitleTimeline = gsap.timeline();
-  const titleLoop = gsap.timeline({ repeat: -1 });
-
-  titleLoop
-    .to(shortWords, {
-      autoAlpha: 0,
-      yPercent: -78,
-      scale: 0.94,
-      clipPath: "inset(0% 0% 100% 0%)",
-      stagger: 0.045,
-      duration: 0.34,
-      ease: "power2.in",
-    })
-    .set(shortLayer, { autoAlpha: 0 })
-    .set(longLayer, { autoAlpha: 1 })
-    .call(() => setActiveHeroTitleLayer(longLayer, shortLayer))
-    .fromTo(longWords, {
-      autoAlpha: 0,
-      yPercent: 82,
-      clipPath: "inset(100% 0% 0% 0%)",
-    }, {
-      autoAlpha: 1,
-      yPercent: 0,
-      clipPath: "inset(0% 0% 0% 0%)",
-      stagger: 0.052,
-      duration: 0.58,
-      ease: "back.out(1.18)",
-    })
-    .to({}, { duration: 3 })
-    .to(longWords, {
-      autoAlpha: 0,
-      yPercent: -62,
-      clipPath: "inset(0% 0% 100% 0%)",
-      stagger: 0.035,
-      duration: 0.32,
-      ease: "power2.in",
-    })
-    .set(longLayer, { autoAlpha: 0 })
-    .set(shortLayer, { autoAlpha: 1 })
-    .call(() => setActiveHeroTitleLayer(shortLayer, longLayer))
-    .fromTo(shortWords, {
-      autoAlpha: 0,
-      yPercent: 75,
-      scale: 0.82,
-      clipPath: "inset(100% 0% 0% 0%)",
-    }, {
-      autoAlpha: 1,
-      yPercent: 0,
-      scale: 1,
-      clipPath: "inset(0% 0% 0% 0%)",
-      stagger: 0.04,
-      duration: 0.5,
-      ease: "back.out(1.24)",
-    })
-    .to({}, { duration: 3 });
-
-  state.heroTitleTimeline
-    .to(shortWords, {
-      autoAlpha: 1,
-      yPercent: 0,
-      scale: 1,
-      clipPath: "inset(0% 0% 0% 0%)",
-      stagger: 0.045,
-      duration: 0.9,
-      ease: "back.out(1.35)",
-    })
-    .to({}, { duration: 2.35 })
-    .add(titleLoop);
-}
-
-function showReducedMotionHeroTitle() {
-  const shortLayer = document.querySelector('[data-hero-title="short"]');
-  const longLayer = document.querySelector('[data-hero-title="long"]');
-  if (!shortLayer || !longLayer) return;
-  setActiveHeroTitleLayer(longLayer, shortLayer);
-  gsap.set(shortLayer, { autoAlpha: 0 });
-  gsap.set(longLayer, { autoAlpha: 1 });
-}
-
-function setWhatTitle(title) {
-  const titleElement = document.querySelector(".what-dynamic-title");
-  if (!titleElement) return;
-  titleElement.innerHTML = animatedWords(title, "section-title-word");
-  if (reducedMotion.matches) return;
-  gsap.fromTo(titleElement.querySelectorAll(".section-title-word"), {
-    yPercent: 80,
-    opacity: 0,
-  }, {
-    yPercent: 0,
-    opacity: 1,
-    stagger: 0.035,
-    duration: 0.36,
-    ease: "back.out(1.15)",
-  });
-}
-
-function setActiveWorkflowStep(index, title) {
-  document.querySelectorAll(".workflow-step").forEach((step) => {
-    step.classList.toggle("is-active", Number(step.dataset.stepIndex) === index);
-  });
-  setWhatTitle(title);
-}
-
-function resetWorkflowVisuals(workflow) {
-  const inputCode = document.querySelector(".workflow-input-editor .typing-code");
-  const outputCode = document.querySelector(".workflow-output-editor .typing-code");
-  const badges = document.querySelectorAll(".workflow-badge");
-  if (inputCode) inputCode.textContent = "";
-  if (outputCode) outputCode.textContent = "";
-  badges.forEach((badge) => {
-    badge.textContent = workflow.badge;
-  });
-  document.querySelectorAll(".workflow-step").forEach((step) => step.classList.remove("is-active"));
-}
-
-function buildWhatWorkflowTimeline() {
-  const localizedContent = content[state.language];
-  const workflow = document.querySelector(".what-workflow");
-  if (!workflow) return null;
-  const inputEditor = workflow.querySelector(".workflow-input-editor");
-  const outputEditor = workflow.querySelector(".workflow-output-editor");
-  const core = workflow.querySelector(".workflow-core");
-  const logo = workflow.querySelector(".workflow-logo");
-  const lines = workflow.querySelectorAll(".workflow-line");
-  const inputCode = workflow.querySelector(".workflow-input-editor .typing-code");
-  const outputCode = workflow.querySelector(".workflow-output-editor .typing-code");
-  const steps = localizedContent.what.steps;
-  const scenario = localizedContent.what.workflows[0];
-  if (!inputEditor || !outputEditor || !core || !logo || !inputCode || !outputCode) return null;
-
-  resetWorkflowVisuals(scenario);
-  gsap.set([inputEditor, outputEditor], { autoAlpha: 0, y: 18 });
-  gsap.set(core, { autoAlpha: isMobileLayout() ? 0 : 1, y: 0 });
-  gsap.set(logo, { autoAlpha: 0, scale: 0.78, rotation: -8 });
-  gsap.set(lines, { scaleX: 0, transformOrigin: "50% 50%" });
-  const adjustedInputCode = scenario.adjustedInputCode || scenario.inputCode;
-  const oldValue = scenario.highlightOldValue || "42.0";
-  const newValue = scenario.highlightNewValue || "86.5";
-  const timing = {
-    repeatDelay: 1.45,
-    editorReveal: 0.52,
-    inputType: 1.75,
-    afterInput: 0.78,
-    selectValue: 0.54,
-    afterSelect: 0.6,
-    valueType: 1.16,
-    afterValue: 0.58,
-    beforeCalculate: 0.42,
-    lineDraw: 0.42,
-    logoEnter: 0.62,
-    logoSettle: 0.26,
-    outputReveal: 0.5,
-    outputType: 1.68,
-    selectOutput: 0.58,
-    afterOutputSelect: 0.72,
-    endHold: 1.3,
-  };
-  if (isMobileLayout()) {
-    return gsap.timeline({ paused: true, repeat: -1, repeatDelay: 0.8 })
-      .call(() => {
-        resetWorkflowVisuals(scenario);
-        setWhatTitle(localizedContent.what.restoredTitle);
-        gsap.set([inputEditor, outputEditor], { autoAlpha: 0, y: 18, scale: 0.98 });
-        gsap.set(core, { autoAlpha: 0, y: 12, scale: 0.96 });
-        gsap.set(logo, { autoAlpha: 0, scale: 0.72, rotation: -8 });
-        gsap.set(lines, { scaleX: 0, transformOrigin: "50% 50%" });
-      })
-      .call(() => setActiveWorkflowStep(0, steps[0].title))
-      .to(inputEditor, { autoAlpha: 1, y: 0, scale: 1, duration: 0.48, ease: "power3.out" })
-      .add(typeCodeText(inputCode, scenario.inputCode, 1.36))
-      .to({}, { duration: 0.55 })
-      .call(() => setActiveWorkflowStep(1, steps[1].title))
-      .call(() => {
-        inputCode.innerHTML = codeWithMarkedValue(scenario.inputCode, oldValue);
-      })
-      .call(() => {
-        const selection = inputEditor.querySelector(".code-selection");
-        if (selection) {
-          gsap.to(selection, {
-            duration: 0.42,
-            backgroundColor: "rgba(3, 155, 229, 0.34)",
-            ease: "power2.out",
-          });
-        }
-      })
-      .to({}, { duration: 0.34 })
-      .add(typeMarkedValue(inputCode, scenario.inputCode, oldValue, newValue, 0.92))
-      .call(() => {
-        inputCode.textContent = adjustedInputCode;
-      })
-      .to({}, { duration: 0.72 })
-      .to(inputEditor, { autoAlpha: 0, y: -12, scale: 0.98, duration: 0.34, ease: "power2.in" })
-      .call(() => setActiveWorkflowStep(2, steps[2].title))
-      .to(core, { autoAlpha: 1, y: 0, scale: 1, duration: 0.36, ease: "power3.out" })
-      .to(logo, { autoAlpha: 1, scale: 1.16, rotation: 0, duration: 0.58, ease: "back.out(1.85)" }, "-=0.12")
-      .to(logo, { scale: 1, duration: 0.22, ease: "power2.out" })
-      .to({}, { duration: 0.76 })
-      .to(core, { autoAlpha: 0, y: -10, scale: 0.96, duration: 0.32, ease: "power2.in" })
-      .call(() => setActiveWorkflowStep(3, steps[3].title))
-      .to(outputEditor, { autoAlpha: 1, y: 0, scale: 1, duration: 0.48, ease: "power3.out" })
-      .add(typeCodeText(outputCode, scenario.outputCode, 1.32))
-      .call(() => {
-        outputCode.innerHTML = selectedCodeBlock(scenario.outputCode);
-      })
-      .call(() => {
-        const selection = outputEditor.querySelector(".code-selection-block");
-        if (selection) {
-          gsap.to(selection, {
-            duration: 0.46,
-            backgroundColor: "rgba(3, 155, 229, 0.26)",
-            ease: "power2.out",
-          });
-        }
-      })
-      .to({}, { duration: 1.0 })
-      .to(outputEditor, { autoAlpha: 0, y: -12, scale: 0.98, duration: 0.34, ease: "power2.in" })
-      .call(() => {
-        document.querySelectorAll(".workflow-step").forEach((step) => step.classList.remove("is-active"));
-        setWhatTitle(localizedContent.what.restoredTitle);
-      });
-  }
-
-  const timeline = gsap.timeline({ paused: true, repeat: -1, repeatDelay: timing.repeatDelay });
-  timeline
-    .call(() => {
-      resetWorkflowVisuals(scenario);
-      setWhatTitle(localizedContent.what.restoredTitle);
-      gsap.set([inputEditor, outputEditor], { autoAlpha: 0, y: 18 });
-      gsap.set(core, { autoAlpha: 1, y: 0, scale: 1 });
-      gsap.set(logo, { autoAlpha: 0, scale: 0.78, rotation: -8 });
-      gsap.set(lines, { scaleX: 0, transformOrigin: "50% 50%" });
-    })
-    .call(() => setActiveWorkflowStep(0, steps[0].title))
-    .to(inputEditor, { autoAlpha: 1, y: 0, duration: timing.editorReveal, ease: "power3.out" })
-    .add(typeCodeText(inputCode, scenario.inputCode, timing.inputType))
-    .to({}, { duration: timing.afterInput })
-    .call(() => setActiveWorkflowStep(1, steps[1].title))
-    .call(() => {
-      inputCode.innerHTML = codeWithMarkedValue(scenario.inputCode, oldValue);
-    })
-    .call(() => {
-      const selection = inputEditor.querySelector(".code-selection");
-      if (selection) {
-        gsap.to(selection, {
-          duration: timing.selectValue,
-          backgroundColor: "rgba(3, 155, 229, 0.34)",
-          ease: "power2.out",
-        });
-      }
-    })
-    .to({}, { duration: timing.afterSelect })
-    .add(typeMarkedValue(inputCode, scenario.inputCode, oldValue, newValue, timing.valueType))
-    .call(() => {
-      const selection = inputEditor.querySelector(".code-selection");
-      if (selection) {
-        gsap.to(selection, {
-          duration: timing.afterValue,
-          backgroundColor: "rgba(3, 155, 229, 0.18)",
-          ease: "power2.out",
-        });
-      }
-    })
-    .to({}, { duration: timing.afterValue })
-    .call(() => {
-      inputCode.textContent = adjustedInputCode;
-    })
-    .to({}, { duration: timing.beforeCalculate })
-    .call(() => setActiveWorkflowStep(2, steps[2].title))
-    .to(".workflow-line-left", { scaleX: 1, duration: timing.lineDraw, ease: "power2.out" })
-    .to(logo, { autoAlpha: 1, scale: 1.16, rotation: 0, duration: timing.logoEnter, ease: "back.out(1.75)" }, "-=0.08")
-    .to(logo, { scale: 1, duration: timing.logoSettle, ease: "power2.out" })
-    .to(".workflow-line-right", { scaleX: 1, duration: timing.lineDraw, ease: "power2.out" }, "-=0.1")
-    .to(outputEditor, { autoAlpha: 1, y: 0, duration: timing.outputReveal, ease: "power3.out" }, "-=0.02")
-    .add(typeCodeText(outputCode, scenario.outputCode, timing.outputType), "-=0.02")
-    .call(() => setActiveWorkflowStep(3, steps[3].title))
-    .call(() => {
-      outputCode.innerHTML = selectedCodeBlock(scenario.outputCode);
-    })
-    .call(() => {
-      const selection = outputEditor.querySelector(".code-selection-block");
-      if (selection) {
-        gsap.to(selection, {
-          duration: timing.selectOutput,
-          backgroundColor: "rgba(3, 155, 229, 0.26)",
-          ease: "power2.out",
-        });
-      }
-    })
-    .to({}, { duration: timing.afterOutputSelect })
-    .to({}, { duration: timing.endHold })
-    .call(() => {
-      document.querySelectorAll(".workflow-step").forEach((step) => step.classList.remove("is-active"));
-      setWhatTitle(localizedContent.what.restoredTitle);
-    });
-  return timeline;
-}
-
-function installWhatWorkflowAnimation() {
-  const card = document.querySelector(".what-card");
-  state.whatTimeline = buildWhatWorkflowTimeline();
-  if (!card || !state.whatTimeline) return;
-  if (reducedMotion.matches) {
-    const firstWorkflow = content[state.language].what.workflows[0];
-    resetWorkflowVisuals(firstWorkflow);
-    document.querySelector(".workflow-input-editor .typing-code").textContent = firstWorkflow.adjustedInputCode || firstWorkflow.inputCode;
-    document.querySelector(".workflow-output-editor .typing-code").textContent = firstWorkflow.outputCode;
-    return;
-  }
-  ScrollTrigger.create({
-    trigger: card,
-    start: "top 72%",
-    end: "bottom 28%",
-    onEnter: () => {
-      if (!state.snapLocked) scheduleSectionLoopStart("what");
-    },
-    onEnterBack: () => {
-      if (!state.snapLocked) scheduleSectionLoopStart("what");
-    },
-    onLeave: () => {
-      if (!state.snapLocked) scheduleSectionLoopStart(null);
-    },
-    onLeaveBack: () => {
-      if (!state.snapLocked) scheduleSectionLoopStart(null);
-    },
-  });
-}
-
-function playSectionCardAnimation(card) {
-  if (reducedMotion.matches) return;
-  const titleWords = card.classList.contains("hero-card")
-    ? []
-    : card.querySelectorAll(".section-title-word");
-  const description = card.querySelector(".section-description, .lead");
-  const panels = card.querySelectorAll(".workflow-editor, .workflow-core, .workflow-step, .code-panel, .profile-panel, .result-panel, .module-card");
-  const timeline = gsap.timeline({ defaults: { ease: "power3.out" } });
-  timeline
-    .fromTo(card, {
-      autoAlpha: 0,
-      y: 26,
-      scale: 0.985,
-      filter: "blur(8px)",
-    }, {
-      autoAlpha: 1,
-      y: 0,
-      scale: 1,
-      filter: "blur(0px)",
-      duration: 0.46,
-    });
-  if (titleWords.length) {
-    timeline.fromTo(titleWords, {
-      yPercent: 110,
-      opacity: 0,
-    }, {
-      yPercent: 0,
-      opacity: 1,
-      stagger: 0.04,
-      duration: 0.42,
-      ease: "back.out(1.18)",
-    }, "-=0.2");
-  }
-  if (description) {
-    timeline.fromTo(description, { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3 }, "-=0.14");
-  }
-  if (panels.length && !card.classList.contains("what-card") && !card.classList.contains("demo-card")) {
-    timeline.fromTo(panels, {
-      y: 22,
-      opacity: 0,
-    }, {
-      y: 0,
-      opacity: 1,
-      stagger: 0.06,
-      duration: 0.34,
-    }, "-=0.12");
-  }
-}
-
-function installReplayCardAnimations() {
-  gsap.utils.toArray(".section-card").forEach((card) => {
-    ScrollTrigger.create({
-      trigger: card,
-      start: "top 78%",
-      end: "bottom 22%",
-      onEnter: () => playSectionCardAnimation(card),
-      onEnterBack: () => playSectionCardAnimation(card),
-    });
-  });
-}
-
-function buildDemoTimeline() {
-  const demoCard = document.querySelector(".demo-card");
-  if (!demoCard) return null;
-  const inputPanel = demoCard.querySelector(".code-panel");
-  const profilePanel = demoCard.querySelector(".profile-panel");
-  const outputPanel = demoCard.querySelector(".result-panel");
-  const inputCode = demoCard.querySelector(".demo-input-code");
-  const outputCode = demoCard.querySelector(".demo-output-code");
-  const profileOutline = demoCard.querySelector(".profile-outline");
-  const profileFillMask = demoCard.querySelector(".profile-fill-mask");
-  const inputText = inputCode?.dataset.code || "";
-  const outputText = outputCode?.dataset.code || "";
-  if (!inputPanel || !profilePanel || !outputPanel || !inputCode || !outputCode || !profileOutline || !profileFillMask) return null;
-
-  inputCode.textContent = "";
-  outputCode.textContent = "";
-  gsap.set([inputPanel, profilePanel, outputPanel], { autoAlpha: 0, y: 18 });
-  gsap.set(profileOutline, { strokeDasharray: 1200, strokeDashoffset: 1200 });
-  gsap.set(profileFillMask, { attr: { y: 292, height: 0 } });
-  if (isMobileLayout()) {
-    return gsap.timeline({ paused: true, repeat: -1, repeatDelay: 0.55 })
-      .call(() => {
-        inputCode.textContent = "";
-        outputCode.textContent = "";
-        gsap.set([inputPanel, profilePanel, outputPanel], { autoAlpha: 0, y: 18, scale: 0.98 });
-        gsap.set(profileOutline, { strokeDasharray: 1200, strokeDashoffset: 1200 });
-        gsap.set(profileFillMask, { attr: { y: 292, height: 0 } });
-      })
-      .to(inputPanel, { autoAlpha: 1, y: 0, scale: 1, duration: 0.44, ease: "power3.out" })
-      .add(typeCodeText(inputCode, inputText, 1.08))
-      .to({}, { duration: 0.72 })
-      .to(inputPanel, { autoAlpha: 0, y: -12, scale: 0.98, duration: 0.32, ease: "power2.in" })
-      .to(profilePanel, { autoAlpha: 1, y: 0, scale: 1, duration: 0.46, ease: "power3.out" })
-      .to(profileOutline, { strokeDashoffset: 0, duration: 0.92, ease: "power2.inOut" })
-      .to(profileFillMask, {
-        attr: { y: 145.8, height: 146.2 },
-        duration: 0.86,
-        ease: "power2.out",
-      }, "-=0.34")
-      .to({}, { duration: 0.76 })
-      .to(profilePanel, { autoAlpha: 0, y: -12, scale: 0.98, duration: 0.32, ease: "power2.in" })
-      .to(outputPanel, { autoAlpha: 1, y: 0, scale: 1, duration: 0.44, ease: "power3.out" })
-      .add(typeCodeText(outputCode, outputText, 1.08))
-      .to({}, { duration: 1.05 })
-      .to(outputPanel, { autoAlpha: 0, y: -12, scale: 0.98, duration: 0.32, ease: "power2.in" });
-  }
-
-  return gsap.timeline({ paused: true, repeat: -1, repeatDelay: 0.95 })
-    .call(() => {
-      inputCode.textContent = "";
-      outputCode.textContent = "";
-      gsap.set([inputPanel, profilePanel, outputPanel], { autoAlpha: 0, y: 18 });
-      gsap.set(profileOutline, { strokeDasharray: 1200, strokeDashoffset: 1200 });
-      gsap.set(profileFillMask, { attr: { y: 292, height: 0 } });
-    })
-    .to(inputPanel, { autoAlpha: 1, y: 0, duration: 0.34, ease: "power3.out" })
-    .add(typeCodeText(inputCode, inputText, 0.95))
-    .to(profilePanel, { autoAlpha: 1, y: 0, duration: 0.34, ease: "power3.out" }, "+=0.08")
-    .to(profileOutline, { strokeDashoffset: 0, duration: 0.86, ease: "power2.inOut" })
-    .to(profileFillMask, {
-      attr: { y: 145.8, height: 146.2 },
-      duration: 0.82,
-      ease: "power2.out",
-    }, "-=0.36")
-    .to(outputPanel, { autoAlpha: 1, y: 0, duration: 0.34, ease: "power3.out" }, "+=0.04")
-    .add(typeCodeText(outputCode, outputText, 0.95))
-    .to({}, { duration: 0.8 });
-}
-
-function installDemoLoopAnimation() {
-  const demoCard = document.querySelector(".demo-card");
-  state.demoTimeline = buildDemoTimeline();
-  if (!demoCard || !state.demoTimeline) return;
-  if (reducedMotion.matches) {
-    const demoContent = content[state.language].demo;
-    document.querySelector(".demo-input-code").textContent = demoContent.inputCode;
-    document.querySelector(".demo-output-code").textContent = demoContent.outputCode;
-    gsap.set(".profile-outline", { strokeDasharray: 0, strokeDashoffset: 0 });
-    gsap.set(".profile-fill-mask", { attr: { y: 145.8, height: 146.2 } });
-    return;
-  }
-  ScrollTrigger.create({
-    trigger: demoCard,
-    start: "top 72%",
-    end: "bottom 28%",
-    onEnter: () => {
-      if (!state.snapLocked) scheduleSectionLoopStart("volumina");
-    },
-    onEnterBack: () => {
-      if (!state.snapLocked) scheduleSectionLoopStart("volumina");
-    },
-    onLeave: () => {
-      if (!state.snapLocked) scheduleSectionLoopStart(null);
-    },
-    onLeaveBack: () => {
-      if (!state.snapLocked) scheduleSectionLoopStart(null);
-    },
-  });
-}
-
-function installModuleAnimation() {
-  const moduleCard = document.querySelector(".modules-card");
-  if (!moduleCard || reducedMotion.matches) return;
-  state.moduleTimeline = buildModuleTimeline();
-  ScrollTrigger.create({
-    trigger: moduleCard,
-    start: "top 76%",
-    end: "bottom 24%",
-    onEnter: () => {
-      if (state.moduleTimeline) {
-        state.moduleTimeline.restart(true);
-      } else {
-        playModuleAnimation();
-      }
-    },
-    onEnterBack: () => {
-      if (state.moduleTimeline) {
-        state.moduleTimeline.restart(true);
-      } else {
-        playModuleAnimation();
-      }
-    },
-    onLeave: () => state.moduleTimeline?.pause(0),
-    onLeaveBack: () => state.moduleTimeline?.pause(0),
-  });
-}
-
-function buildModuleTimeline() {
-  if (!isMobileLayout()) return null;
-  const moduleCard = document.querySelector(".modules-card");
-  const cards = [...document.querySelectorAll(".module-card")];
-  const sparks = document.querySelectorAll(".module-spark span");
-  if (!moduleCard || cards.length === 0) return null;
-  gsap.set(cards, { autoAlpha: 0, y: 18, scale: 0.97, rotateX: 0 });
-  gsap.set(sparks, { scale: 0.82, opacity: 0.34, rotation: -14 });
-  const timeline = gsap.timeline({ paused: true, repeat: -1, repeatDelay: 0.35 });
-  timeline
-    .to(sparks, {
-      scale: 1,
-      opacity: 0.58,
-      rotation: 0,
-      duration: 0.52,
-      stagger: 0.08,
-      ease: "back.out(1.6)",
-    }, 0);
-  cards.forEach((card, index) => {
-    timeline
-      .to(card, {
-        autoAlpha: 1,
-        y: 0,
-        scale: 1,
-        duration: 0.42,
-        ease: "power3.out",
-      }, index === 0 ? ">+=0.08" : ">-0.1")
-      .to({}, { duration: 1.35 })
-      .to(card, {
-        autoAlpha: 0,
-        y: -12,
-        scale: 0.97,
-        duration: 0.32,
-        ease: "power2.in",
-      });
-  });
-  return timeline;
-}
-
-function playModuleAnimation() {
-  gsap.fromTo(".module-spark span", {
-    scale: 0,
-    opacity: 0,
-    rotation: -30,
-  }, {
-    scale: 1,
-    opacity: 1,
-    rotation: 0,
-    duration: 0.55,
-    stagger: 0.08,
-    ease: "back.out(1.8)",
-  });
-  gsap.fromTo(".module-card", {
-    y: 26,
-    opacity: 0,
-    rotateX: -12,
-  }, {
-    y: 0,
-    opacity: 1,
-    rotateX: 0,
-    stagger: 0.07,
-    duration: 0.42,
-    ease: "power3.out",
-  });
-}
-
-function runAnimations() {
+function runAnimations(localizedContent) {
   resetAnimationState();
-  if (reducedMotion.matches) {
-    const firstWorkflow = content[state.language].what.workflows[0];
-    const demoContent = content[state.language].demo;
-    showReducedMotionHeroTitle();
-    document.querySelector(".workflow-input-editor .typing-code").textContent = firstWorkflow.adjustedInputCode || firstWorkflow.inputCode;
-    document.querySelector(".workflow-output-editor .typing-code").textContent = firstWorkflow.outputCode;
-    document.querySelector(".demo-input-code").textContent = demoContent.inputCode;
-    document.querySelector(".demo-output-code").textContent = demoContent.outputCode;
-    gsap.set(".profile-fill-mask", { attr: { y: 145.8, height: 146.2 } });
-    return;
-  }
-
-  const lenis = new Lenis({ lerp: 0.08, smoothWheel: false });
-  state.lenis = lenis;
-  state.lenisTicker = (time) => {
-    lenis.raf(time * 1000);
-    updateScrollControls();
-  };
-  gsap.ticker.add(state.lenisTicker);
-  gsap.ticker.lagSmoothing(0);
-
-  gsap.to(".global-orbit-input", { rotation: 360, duration: 24, repeat: -1, ease: "none" });
-  gsap.to(".global-orbit-tool", { rotation: -360, duration: 31, repeat: -1, ease: "none" });
-  gsap.to(".global-orbit-output", { rotation: 360, duration: 39, repeat: -1, ease: "none" });
-  gsap.to(".global-orbits", {
-    yPercent: -6,
-    xPercent: 2,
-    ease: "none",
-    scrollTrigger: { trigger: document.body, start: "top top", end: "bottom bottom", scrub: true },
+  initScroll({
+    reducedMotion: reducedMotion.matches,
+    onFrame: updateScrollControls,
   });
-  installHeroTitleLoop();
-  installReplayCardAnimations();
-  installWhatWorkflowAnimation();
-  installDemoLoopAnimation();
-  installModuleAnimation();
+  state.animationCleanup = initAnimations({
+    root: document,
+    localizedContent,
+    reducedMotion,
+    isMobileLayout,
+    centerScrollPosition: targetScrollPosition,
+    scrollToCard: scrollToTarget,
+    updateScrollControls,
+  });
   ScrollTrigger.refresh();
 }
 
