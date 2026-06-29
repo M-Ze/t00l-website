@@ -429,6 +429,7 @@ function buildWhatWorkflowTimeline(localizedContent, isMobileLayout) {
   const oldValue = scenario.highlightOldValue || "42.0";
   const newValue = scenario.highlightNewValue || "86.5";
   const timing = {
+    restoredTitleHold: 2.35,
     repeatDelay: 1.45,
     editorReveal: 0.52,
     inputType: 1.75,
@@ -457,6 +458,7 @@ function buildWhatWorkflowTimeline(localizedContent, isMobileLayout) {
         gsap.set(logo, { autoAlpha: 0, scale: 0.72, rotation: -8 });
         gsap.set(lines, { scaleX: 0, transformOrigin: "50% 50%" });
       })
+      .to({}, { duration: timing.restoredTitleHold })
       .call(() => setActiveWorkflowStep(0, steps[0].title))
       .to(inputEditor, { autoAlpha: 1, y: 0, scale: 1, duration: 0.48, ease: "power3.out" })
       .add(typeCodeText(inputCode, scenario.inputCode, 1.36))
@@ -510,6 +512,7 @@ function buildWhatWorkflowTimeline(localizedContent, isMobileLayout) {
       gsap.set(logo, { autoAlpha: 0, scale: 0.78, rotation: -8 });
       gsap.set(lines, { scaleX: 0, transformOrigin: "50% 50%" });
     })
+    .to({}, { duration: timing.restoredTitleHold })
     .call(() => setActiveWorkflowStep(0, steps[0].title))
     .to(inputEditor, { autoAlpha: 1, y: 0, duration: timing.editorReveal, ease: "power3.out" })
     .add(typeCodeText(inputCode, scenario.inputCode, timing.inputType))
