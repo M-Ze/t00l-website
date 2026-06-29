@@ -323,7 +323,7 @@ function hero(localizedContent) {
     <div class="section-card hero-card">
       <section class="hero-copy" aria-labelledby="hero-title">
         <p class="eyebrow">${brandText(localizedContent.hero.eyebrow)}</p>
-        <h1 id="hero-title" class="hero-title hero-title-gradient" aria-label="${escapeAttribute(`${siteConfig.appName}: ${localizedContent.hero.title}`)}">
+        <h1 id="hero-title" class="hero-title hero-title-text" aria-label="${escapeAttribute(`${siteConfig.appName}: ${localizedContent.hero.title}`)}">
           <span class="hero-title-layer is-active" data-hero-title="short" aria-hidden="true">
             ${animatedWords(siteConfig.appName, "hero-title-word")}
           </span>
@@ -783,8 +783,8 @@ function installHeroTitleLoop() {
   const longWords = longLayer.querySelectorAll(".hero-title-word");
   gsap.set(shortLayer, { autoAlpha: 1 });
   gsap.set(longLayer, { autoAlpha: 0 });
-  gsap.set(shortWords, { autoAlpha: 0, yPercent: 18, scale: 0.72, filter: "blur(10px)", clipPath: "inset(100% 0% 0% 0%)" });
-  gsap.set(longWords, { autoAlpha: 0, yPercent: 82, filter: "blur(9px)", clipPath: "inset(100% 0% 0% 0%)" });
+  gsap.set(shortWords, { autoAlpha: 0, yPercent: 18, scale: 0.72, clipPath: "inset(100% 0% 0% 0%)" });
+  gsap.set(longWords, { autoAlpha: 0, yPercent: 82, clipPath: "inset(100% 0% 0% 0%)" });
 
   state.heroTitleTimeline = gsap.timeline();
   const titleLoop = gsap.timeline({ repeat: -1 });
@@ -794,7 +794,6 @@ function installHeroTitleLoop() {
       autoAlpha: 0,
       yPercent: -78,
       scale: 0.94,
-      filter: "blur(8px)",
       clipPath: "inset(0% 0% 100% 0%)",
       stagger: 0.045,
       duration: 0.34,
@@ -806,12 +805,10 @@ function installHeroTitleLoop() {
     .fromTo(longWords, {
       autoAlpha: 0,
       yPercent: 82,
-      filter: "blur(9px)",
       clipPath: "inset(100% 0% 0% 0%)",
     }, {
       autoAlpha: 1,
       yPercent: 0,
-      filter: "blur(0px)",
       clipPath: "inset(0% 0% 0% 0%)",
       stagger: 0.052,
       duration: 0.58,
@@ -821,7 +818,6 @@ function installHeroTitleLoop() {
     .to(longWords, {
       autoAlpha: 0,
       yPercent: -62,
-      filter: "blur(8px)",
       clipPath: "inset(0% 0% 100% 0%)",
       stagger: 0.035,
       duration: 0.32,
@@ -834,13 +830,11 @@ function installHeroTitleLoop() {
       autoAlpha: 0,
       yPercent: 75,
       scale: 0.82,
-      filter: "blur(8px)",
       clipPath: "inset(100% 0% 0% 0%)",
     }, {
       autoAlpha: 1,
       yPercent: 0,
       scale: 1,
-      filter: "blur(0px)",
       clipPath: "inset(0% 0% 0% 0%)",
       stagger: 0.04,
       duration: 0.5,
@@ -853,7 +847,6 @@ function installHeroTitleLoop() {
       autoAlpha: 1,
       yPercent: 0,
       scale: 1,
-      filter: "blur(0px)",
       clipPath: "inset(0% 0% 0% 0%)",
       stagger: 0.045,
       duration: 0.9,
@@ -1397,13 +1390,6 @@ function runAnimations() {
   gsap.ticker.add(state.lenisTicker);
   gsap.ticker.lagSmoothing(0);
 
-  gsap.to(".hero-title-gradient", {
-    "--title-gradient-x": "100%",
-    duration: 3.8,
-    repeat: -1,
-    yoyo: true,
-    ease: "sine.inOut",
-  });
   gsap.to(".global-orbit-input", { rotation: 360, duration: 24, repeat: -1, ease: "none" });
   gsap.to(".global-orbit-tool", { rotation: -360, duration: 31, repeat: -1, ease: "none" });
   gsap.to(".global-orbit-output", { rotation: 360, duration: 39, repeat: -1, ease: "none" });

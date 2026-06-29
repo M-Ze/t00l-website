@@ -1,24 +1,31 @@
 @font-face {
   font-family: "Source Sans 3";
-  src: url("./fonts/SourceSans3[wght].ttf") format("truetype");
-  font-weight: 200 900;
+  src: url("./fonts/SourceSans3-Regular.woff2") format("woff2");
+  font-weight: 400;
   font-style: normal;
   font-display: swap;
 }
 
 @font-face {
   font-family: "Source Sans 3";
-  src: url("./fonts/SourceSans3-Italic[wght].ttf") format("truetype");
-  font-weight: 200 900;
-  font-style: italic;
+  src: url("./fonts/SourceSans3-Semibold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
   font-display: swap;
 }
 
 @font-face {
   font-family: "Inconsolata";
-  src: url("./fonts/Inconsolata[wdth,wght].ttf") format("truetype");
-  font-weight: 200 900;
-  font-stretch: 50% 200%;
+  src: url("./fonts/Inconsolata-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Inconsolata";
+  src: url("./fonts/Inconsolata-SemiBold.woff2") format("woff2");
+  font-weight: 600;
   font-style: normal;
   font-display: swap;
 }
@@ -406,6 +413,12 @@ p {
   overflow-wrap: break-word;
 }
 
+h1,
+h2,
+h3 {
+  font-weight: 600;
+}
+
 h1 {
   margin: 0;
   max-width: 21ch;
@@ -426,7 +439,6 @@ h3 {
 }
 
 .hero-title {
-  --title-gradient-x: 0%;
   display: grid;
   align-items: start;
   overflow: visible;
@@ -456,31 +468,13 @@ h3 {
   line-height: inherit;
 }
 
-.hero-title-gradient {
-  color: transparent;
-  background:
-    linear-gradient(
-      105deg,
-      color-mix(in srgb, var(--ink), white 18%) 0%,
-      var(--ink) 28%,
-      color-mix(in srgb, var(--ink), transparent 18%) 52%,
-      var(--ink) 76%,
-      color-mix(in srgb, var(--ink), white 24%) 100%
-    );
-  background-size: 220% 100%;
-  background-position: var(--title-gradient-x) 50%;
-  -webkit-background-clip: text;
-  background-clip: text;
+.hero-title-text {
+  color: var(--ink);
 }
 
 .hero-title-word {
   display: inline-block;
-  color: transparent;
-  background: inherit;
-  background-size: inherit;
-  background-position: var(--title-gradient-x) 50%;
-  -webkit-background-clip: text;
-  background-clip: text;
+  color: inherit;
   transform-origin: 50% 82%;
   will-change: transform, opacity;
 }
