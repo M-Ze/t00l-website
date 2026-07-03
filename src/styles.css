@@ -133,6 +133,18 @@ body::before {
   z-index: 1;
 }
 
+.render-warmup-frame {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(200%, 200%);
+}
+
 a {
   color: inherit;
 }
@@ -259,6 +271,11 @@ pre,
 .brand img {
   width: 2.5rem;
   height: 2.5rem;
+  transition: filter 180ms ease;
+}
+
+.brand.is-active-location img {
+  filter: drop-shadow(0 0 0.75rem color-mix(in srgb, var(--accent), transparent 34%));
 }
 
 .nav {
@@ -273,12 +290,22 @@ pre,
   color: var(--muted);
   font-weight: 600;
   text-decoration: none;
+  transition:
+    color 180ms ease,
+    text-shadow 180ms ease;
 }
 
 .nav a:hover,
 .secondary-link:hover,
 .site-footer a:hover {
   color: var(--accent-dark);
+}
+
+.nav a.is-active-location {
+  color: var(--accent-dark);
+  text-shadow:
+    0 0 0.65rem color-mix(in srgb, var(--accent), transparent 38%),
+    0 0 1.25rem color-mix(in srgb, var(--accent), transparent 58%);
 }
 
 .info-link,
@@ -293,6 +320,18 @@ pre,
   place-items: center;
   border: 1px solid transparent;
   border-radius: 0.5rem;
+  transition:
+    border-color 180ms ease,
+    box-shadow 180ms ease,
+    background 180ms ease;
+}
+
+.info-link.is-active-location {
+  border-color: color-mix(in srgb, var(--accent), transparent 24%);
+  background: color-mix(in srgb, var(--accent-soft), var(--panel) 48%);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent), transparent 52%),
+    0 0 1.1rem color-mix(in srgb, var(--accent), transparent 60%);
 }
 
 .info-link svg,
@@ -494,6 +533,8 @@ h3 {
 .hero-title-word {
   display: inline-block;
   color: inherit;
+  opacity: 0;
+  visibility: hidden;
   transform-origin: 50% 82%;
   will-change: transform, opacity;
 }
@@ -606,18 +647,19 @@ pre {
 .what-card {
   display: grid;
   gap: clamp(0.8rem, 2vw, 1.2rem);
-  height: min(40rem, calc(100svh - 4.5rem));
+  height: auto;
+  max-height: min(35.75rem, calc(100svh - var(--header-height) - clamp(1.15rem, 4vh, 2.5rem)));
   align-content: start;
   overflow: hidden;
 }
 
 .what-card .section-heading {
-  min-height: clamp(7.4rem, 16vh, 8.8rem);
+  min-height: clamp(5.8rem, 13vh, 7.8rem);
   margin-bottom: 0;
 }
 
 .what-dynamic-title {
-  min-height: 2.2em;
+  min-height: 1.18em;
 }
 
 .workflow-showcase {
@@ -653,7 +695,7 @@ pre {
 }
 
 .workflow-step {
-  min-height: 7.25rem;
+  min-height: clamp(6.35rem, 13vh, 7.1rem);
   padding: 0.82rem;
   color: var(--muted);
   line-height: 1.32;
@@ -693,7 +735,7 @@ pre {
 }
 
 .workflow-editor {
-  height: clamp(11.7rem, 22vh, 14.2rem);
+  height: clamp(11.6rem, 24vh, 14rem);
   padding: clamp(0.78rem, 1.55vw, 0.95rem);
   overflow: hidden;
 }
@@ -768,7 +810,7 @@ pre {
 .profile-panel,
 .result-panel {
   padding: clamp(0.78rem, 2vw, 1.08rem);
-  min-height: clamp(13.8rem, 27vh, 17rem);
+  min-height: clamp(12.2rem, 24vh, 15.5rem);
   overflow: hidden;
 }
 
@@ -779,7 +821,7 @@ pre {
 .profile-svg {
   width: 100%;
   height: auto;
-  max-height: 13rem;
+  max-height: 11.5rem;
   margin-top: 0.6rem;
   overflow: visible;
 }
@@ -899,6 +941,17 @@ pre {
   box-shadow: 0 0.9rem 2.2rem rgba(15, 23, 42, 0.14);
 }
 
+.scroll-control::before {
+  content: "";
+  position: absolute;
+  inset: -0.45rem;
+  border: 1px solid color-mix(in srgb, var(--accent), transparent 38%);
+  border-radius: inherit;
+  opacity: 0;
+  transform: scale(0.86);
+  pointer-events: none;
+}
+
 .scroll-control.is-available {
   pointer-events: auto;
 }
@@ -942,6 +995,20 @@ pre {
   border-color: color-mix(in srgb, var(--accent), transparent 20%);
   background:
     linear-gradient(180deg, color-mix(in srgb, var(--panel), var(--accent) 10%), var(--panel));
+}
+
+.scroll-control.is-guiding {
+  border-color: color-mix(in srgb, var(--accent), transparent 12%);
+  color: var(--accent-dark);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent), transparent 42%),
+    0 0 1.45rem color-mix(in srgb, var(--accent), transparent 54%),
+    0 0.9rem 2.2rem rgba(15, 23, 42, 0.14);
+  animation: scroll-guide-glow 1.65s ease-in-out infinite;
+}
+
+.scroll-control.is-guiding::before {
+  animation: scroll-guide-ring 1.65s ease-out infinite;
 }
 
 .scroll-up {
@@ -1042,6 +1109,33 @@ pre {
   }
 }
 
+@keyframes scroll-guide-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--accent), transparent 48%),
+      0 0 1.15rem color-mix(in srgb, var(--accent), transparent 62%),
+      0 0.9rem 2.2rem rgba(15, 23, 42, 0.14);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--accent), transparent 18%),
+      0 0 1.9rem color-mix(in srgb, var(--accent), transparent 40%),
+      0 0.9rem 2.2rem rgba(15, 23, 42, 0.14);
+  }
+}
+
+@keyframes scroll-guide-ring {
+  0% {
+    opacity: 0.65;
+    transform: scale(0.78);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.18);
+  }
+}
+
 @media (min-width: 761px) and (orientation: portrait) {
   .hero {
     align-items: center;
@@ -1064,15 +1158,16 @@ pre {
   }
 
   .what-card {
-    height: min(58rem, calc(100svh - var(--header-height) - 2.2rem));
+    height: auto;
+    max-height: min(36rem, calc(100svh - var(--header-height) - 2.2rem));
   }
 
   .what-card .section-heading {
-    min-height: clamp(8.4rem, 13vh, 10.4rem);
+    min-height: clamp(6.2rem, 10vh, 8rem);
   }
 
   .workflow-editor {
-    height: clamp(11.7rem, 18vh, 14rem);
+    height: clamp(10.85rem, 17vh, 13.4rem);
   }
 }
 
@@ -1083,10 +1178,10 @@ pre {
   }
 
   .what-workflow {
-    grid-template-columns: minmax(14rem, 1fr) minmax(5.6rem, 0.5fr) minmax(14rem, 1fr);
-    overflow-x: auto;
-    padding-bottom: 0.35rem;
-    scroll-snap-type: x proximity;
+    grid-template-columns: minmax(0, 1fr) minmax(clamp(4.4rem, 9vw, 5.6rem), 0.42fr) minmax(0, 1fr);
+    overflow: visible;
+    padding-bottom: 0;
+    scroll-snap-type: none;
   }
 
   .workflow-editor,
@@ -1095,11 +1190,11 @@ pre {
   }
 
   .demo-grid {
-    grid-template-columns: repeat(3, minmax(15rem, 1fr));
-    overflow-x: auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: hidden;
     overscroll-behavior-inline: contain;
-    padding-bottom: 0.35rem;
-    scroll-snap-type: x proximity;
+    padding-bottom: 0;
+    scroll-snap-type: none;
   }
 
   .code-panel,
@@ -1118,11 +1213,12 @@ pre {
   }
 
   .what-card {
-    height: min(42rem, calc(100svh - var(--header-height) - 2rem));
+    height: auto;
+    max-height: min(31.5rem, calc(100svh - var(--header-height) - 1.75rem));
   }
 
   .what-card .section-heading {
-    min-height: clamp(6.6rem, 12vh, 8rem);
+    min-height: clamp(5.6rem, 10vh, 6.8rem);
   }
 
   .site-footer {
@@ -1131,6 +1227,41 @@ pre {
 
   .site-footer nav {
     justify-content: start;
+  }
+}
+
+@media (max-width: 980px), (orientation: portrait) {
+  .what-workflow {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: clamp(12rem, 32svh, 16.8rem);
+    overflow: hidden;
+    padding-bottom: 0;
+    scroll-snap-type: none;
+  }
+
+  .what-workflow > * {
+    grid-area: 1 / 1;
+  }
+
+  .workflow-core {
+    min-height: 100%;
+  }
+
+  .workflow-line {
+    display: none;
+  }
+
+  .demo-grid {
+    grid-template-columns: minmax(0, 1fr);
+    min-height: clamp(13.8rem, 36svh, 17.6rem);
+    gap: 0.55rem;
+    overflow: hidden;
+    padding-bottom: 0;
+    scroll-snap-type: none;
+  }
+
+  .demo-grid > article {
+    grid-area: 1 / 1;
   }
 }
 
@@ -1188,11 +1319,16 @@ pre {
   }
 
   .what-card {
-    height: min(31rem, calc(100svh - var(--header-height) - 1rem));
+    height: auto;
+    max-height: min(29rem, calc(100svh - var(--header-height) - 0.9rem));
   }
 
   .what-card .section-heading {
     min-height: 0;
+  }
+
+  .what-dynamic-title {
+    min-height: 2.05em;
   }
 
   .workflow-showcase {
@@ -1200,11 +1336,11 @@ pre {
   }
 
   .workflow-editor {
-    height: clamp(10.6rem, 28svh, 12.8rem);
+    height: clamp(10.2rem, 27svh, 12.4rem);
   }
 
   .workflow-core {
-    min-height: clamp(10.6rem, 28svh, 12.8rem);
+    min-height: clamp(10.2rem, 27svh, 12.4rem);
   }
 
   .workflow-logo {
@@ -1289,10 +1425,10 @@ pre {
   .what-workflow {
     grid-template-columns: minmax(0, 1fr);
     gap: 0.45rem;
-    overflow: visible;
+    overflow: hidden;
     padding-bottom: 0;
     scroll-snap-type: none;
-    min-height: clamp(10.6rem, 28svh, 12.8rem);
+    min-height: clamp(11rem, 30svh, 13.4rem);
   }
 
   .what-workflow > * {
@@ -1301,9 +1437,9 @@ pre {
 
   .demo-grid {
     grid-template-columns: minmax(0, 1fr);
-    min-height: clamp(12.8rem, 34svh, 16rem);
+    min-height: clamp(13.2rem, 35svh, 17rem);
     gap: 0.55rem;
-    overflow-x: visible;
+    overflow: hidden;
     padding-bottom: 0;
     scroll-snap-type: none;
   }

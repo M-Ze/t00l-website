@@ -6,9 +6,19 @@ import { content } from "./content.js";
 import "./styles.css";
 
 const LANGUAGE_STORAGE_KEY = "t00l-landing-language";
-const COMPACT_ANIMATION_QUERY = "(max-width: 560px)";
+const SMARTPHONE_ANIMATION_QUERY = "(max-width: 560px)";
+const VERTICAL_ANIMATION_QUERY = "(orientation: portrait), (max-width: 980px)";
+const ANIMATION_LAYOUTS = Object.freeze({
+  DESKTOP_HORIZONTAL: "desktop-horizontal",
+  DESKTOP_VERTICAL: "desktop-vertical",
+  SMARTPHONE_VERTICAL: "smartphone-vertical",
+});
 const SNAP_DURATION_SECONDS = 0.72;
 const SNAP_DURATION_MS = SNAP_DURATION_SECONDS * 1000;
+const SCROLL_SETTLE_DELAY_MS = 190;
+const SCROLL_SETTLE_TOLERANCE = 28;
+const SCROLL_ADVANCE_THRESHOLD = 42;
+const RENDER_WARMUP_TIMEOUT_MS = 45000;
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 const app = document.querySelector("#app");
 const state = {
@@ -17,7 +27,12 @@ const state = {
   warmup: "idle",
   eventController: null,
   animationCleanup: null,
+  animationLayout: initialAnimationLayout(),
   snapLocked: false,
+  scrollGuideDismissed: false,
+  scrollSettleTimer: 0,
+  scrollDirection: 0,
+  lastScrollY: window.scrollY,
   pointerY: -1,
 };
 
@@ -103,11 +118,17 @@ function animatedWords(value, className) {
 }
 
 /**
- * Returns true when tile groups need the compact overlaid animation flow.
- * @returns {boolean}
+ * Returns the animation layout branch that matches the current viewport.
+ * @returns {"desktop-horizontal" | "desktop-vertical" | "smartphone-vertical"}
  */
-function isMobileLayout() {
-  return window.matchMedia(COMPACT_ANIMATION_QUERY).matches;
+function initialAnimationLayout() {
+  if (window.matchMedia(SMARTPHONE_ANIMATION_QUERY).matches) {
+    return ANIMATION_LAYOUTS.SMARTPHONE_VERTICAL;
+  }
+  if (window.matchMedia(VERTICAL_ANIMATION_QUERY).matches) {
+    return ANIMATION_LAYOUTS.DESKTOP_VERTICAL;
+  }
+  return ANIMATION_LAYOUTS.DESKTOP_HORIZONTAL;
 }
 
 function githubIcon() {
@@ -151,12 +172,51 @@ async function warmupApp() {
   state.warmup = "preparing";
   updateWarmupStatus();
   try {
-    await fetch(target, { mode: "no-cors", cache: "no-store" });
+    await waitForRenderLoad(target, RENDER_WARMUP_TIMEOUT_MS);
     state.warmup = "ready";
   } catch (_error) {
     state.warmup = "preparing";
   }
   updateWarmupStatus();
+}
+
+/**
+ * Loads the Render app in a hidden frame so the CTA glow only starts after page load.
+ * @param {string} url App URL to warm up.
+ * @param {number} timeoutMs Maximum wait before leaving the app in preparing state.
+ * @returns {Promise<void>}
+ */
+function waitForRenderLoad(url, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const frame = document.createElement("iframe");
+    let settled = false;
+
+    const settle = (callback) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      frame.removeEventListener("load", handleLoad);
+      frame.removeEventListener("error", handleError);
+      frame.remove();
+      callback();
+    };
+    const handleLoad = () => settle(resolve);
+    const handleError = () => settle(() => reject(new Error("Render warmup failed")));
+    const timeout = window.setTimeout(() => {
+      settle(() => reject(new Error("Render warmup timed out")));
+    }, timeoutMs);
+
+    frame.className = "render-warmup-frame";
+    frame.title = "T00L app warmup";
+    frame.tabIndex = -1;
+    frame.loading = "eager";
+    frame.referrerPolicy = "no-referrer";
+    frame.setAttribute("aria-hidden", "true");
+    frame.addEventListener("load", handleLoad, { once: true });
+    frame.addEventListener("error", handleError, { once: true });
+    frame.src = url;
+    document.body.append(frame);
+  });
 }
 
 /**
@@ -267,7 +327,7 @@ function header(localizedContent) {
       <button class="language-toggle" type="button" aria-label="${localizedContent.nav.language}">
         ${state.language === "de" ? "EN" : "DE"}
       </button>
-      <a class="app-link compact app-link-glow" href="${siteConfig.appUrl}" target="_blank" rel="noopener noreferrer">
+      <a class="app-link compact" href="${siteConfig.appUrl}" target="_blank" rel="noopener noreferrer">
         ${localizedContent.nav.app}
       </a>
     </div>
@@ -293,7 +353,7 @@ function hero(localizedContent) {
         </h1>
         <p class="lead">${brandText(localizedContent.hero.description)}</p>
         <div class="hero-actions">
-          <a class="app-link primary app-link-glow" href="${siteConfig.appUrl}" target="_blank" rel="noopener noreferrer">
+          <a class="app-link primary" href="${siteConfig.appUrl}" target="_blank" rel="noopener noreferrer">
             ${localizedContent.hero.primary}
           </a>
           <a class="secondary-link" href="#what">${brandText(localizedContent.hero.secondary)}</a>
@@ -488,8 +548,8 @@ function installEvents() {
   document.querySelector(".scroll-up")?.addEventListener("click", () => scrollToAdjacentSection(-1), { signal });
   window.addEventListener("mousemove", handleScrollControlProximity, { signal });
   document.addEventListener("wheel", handleWheelSnap, { capture: true, passive: false, signal });
-  window.addEventListener("scroll", updateScrollControls, { passive: true, signal });
-  window.addEventListener("resize", updateScrollControls, { signal });
+  window.addEventListener("scroll", handleScrollActivity, { passive: true, signal });
+  window.addEventListener("resize", handleResize, { signal });
 }
 
 function handleAnchorClick(event) {
@@ -515,6 +575,7 @@ function resetAnimationState() {
     state.animationCleanup();
     state.animationCleanup = null;
   }
+  clearScrollSettleTimer();
   ScrollTrigger.getAll().forEach((trigger) => trigger.kill());
   gsap.killTweensOf(".scroll-control");
   destroyScroll();
@@ -532,6 +593,10 @@ function updateWarmupStatus() {
   };
   element.textContent = labels[state.warmup];
   element.dataset.state = state.warmup;
+  document.querySelectorAll(".app-link").forEach((link) => {
+    link.dataset.state = state.warmup;
+    link.classList.toggle("app-link-glow", state.warmup === "ready");
+  });
 }
 
 function snapTargets() {
@@ -553,6 +618,7 @@ function currentSnapIndex() {
 }
 
 function scrollToTarget(target) {
+  clearScrollSettleTimer();
   const top = targetScrollPosition(target);
   state.snapLocked = true;
   window.setTimeout(() => {
@@ -605,6 +671,7 @@ function jumpToSection(sectionId) {
 }
 
 function scrollToAdjacentSection(direction) {
+  state.scrollGuideDismissed = true;
   const targets = snapTargets();
   const activeIndex = currentSnapIndex();
   const nextIndex = Math.min(Math.max(activeIndex + direction, 0), targets.length - 1);
@@ -617,6 +684,7 @@ function handleWheelSnap(event) {
   if (Math.abs(event.deltaY) < 8 || event.ctrlKey) return;
   event.preventDefault();
   event.stopPropagation();
+  state.scrollGuideDismissed = true;
   if (state.snapLocked) return;
   const direction = event.deltaY > 0 ? 1 : -1;
   const sections = snapTargets();
@@ -624,6 +692,64 @@ function handleWheelSnap(event) {
   const nextIndex = activeIndex + direction;
   if (nextIndex < 0 || nextIndex >= sections.length) return;
   scrollToAdjacentSection(direction);
+}
+
+function handleScrollActivity() {
+  const currentY = window.scrollY;
+  state.scrollDirection = Math.sign(currentY - state.lastScrollY);
+  state.lastScrollY = currentY;
+  if (currentY > 16) state.scrollGuideDismissed = true;
+  updateScrollControls();
+  scheduleScrollSettleSnap();
+}
+
+function handleResize() {
+  const nextLayout = initialAnimationLayout();
+  if (nextLayout !== state.animationLayout) {
+    const activeSectionId = activeLandingSectionId();
+    state.animationLayout = nextLayout;
+    runAnimations(content[state.language]);
+    jumpToSection(activeSectionId);
+    return;
+  }
+  updateScrollControls();
+  ScrollTrigger.refresh();
+  scheduleScrollSettleSnap();
+}
+
+function scheduleScrollSettleSnap() {
+  clearScrollSettleTimer();
+  if (state.snapLocked) return;
+  state.scrollSettleTimer = window.setTimeout(() => {
+    state.scrollSettleTimer = 0;
+    settleScrollToNearestCard();
+  }, SCROLL_SETTLE_DELAY_MS);
+}
+
+function clearScrollSettleTimer() {
+  if (!state.scrollSettleTimer) return;
+  window.clearTimeout(state.scrollSettleTimer);
+  state.scrollSettleTimer = 0;
+}
+
+function settleScrollToNearestCard() {
+  if (state.snapLocked) return;
+  const targets = snapTargets();
+  const activeIndex = currentSnapIndex();
+  const activeTarget = targets[activeIndex];
+  if (!activeTarget) return;
+
+  const centeredPosition = targetScrollPosition(activeTarget);
+  const offsetFromCenter = window.scrollY - centeredPosition;
+  if (Math.abs(offsetFromCenter) <= SCROLL_SETTLE_TOLERANCE) return;
+
+  let targetIndex = activeIndex;
+  if (state.scrollDirection > 0 && offsetFromCenter > SCROLL_ADVANCE_THRESHOLD) {
+    targetIndex = Math.min(activeIndex + 1, targets.length - 1);
+  } else if (state.scrollDirection < 0 && offsetFromCenter < -SCROLL_ADVANCE_THRESHOLD) {
+    targetIndex = Math.max(activeIndex - 1, 0);
+  }
+  scrollToTarget(targets[targetIndex]);
 }
 
 function handleScrollControlProximity(event) {
@@ -634,6 +760,7 @@ function handleScrollControlProximity(event) {
 function updateScrollControls() {
   const up = document.querySelector(".scroll-up");
   const down = document.querySelector(".scroll-down");
+  updateActiveHeaderLink();
   if (!up || !down) return;
   const activeIndex = currentSnapIndex();
   const canUp = activeIndex > 0 || window.scrollY > 24;
@@ -641,14 +768,35 @@ function updateScrollControls() {
   const hasPointer = state.pointerY >= 0;
   const nearTop = hasPointer && state.pointerY < Math.min(128, window.innerHeight * 0.18);
   const nearBottom = hasPointer && state.pointerY > window.innerHeight - Math.min(150, window.innerHeight * 0.22);
+  const guideDown = !state.scrollGuideDismissed && activeIndex === 0 && window.scrollY < 12 && canDown;
   setScrollControlState(up, canUp, canUp && nearTop, -1);
-  setScrollControlState(down, canDown, canDown && nearBottom, 1);
+  setScrollControlState(down, canDown, canDown && (nearBottom || guideDown), 1);
+  down.classList.toggle("is-guiding", guideDown);
+}
+
+function updateActiveHeaderLink() {
+  const activeId = activeLandingSectionId();
+  document.querySelectorAll(".site-header a").forEach((link) => {
+    const href = link.getAttribute("href") || "";
+    const linkedId = href.startsWith("#") ? href.slice(1) : "";
+    const isActive = (activeId === "top" && link.classList.contains("brand")) || linkedId === activeId;
+    link.classList.toggle("is-active-location", isActive);
+    if (isActive) {
+      link.setAttribute("aria-current", "location");
+    } else {
+      link.removeAttribute("aria-current");
+    }
+  });
 }
 
 function setScrollControlState(button, available, near, direction) {
   button.classList.toggle("is-available", available);
   button.classList.toggle("is-near", near);
-  if (reducedMotion.matches) return;
+  if (reducedMotion.matches) {
+    button.style.opacity = available ? "1" : "0";
+    button.style.visibility = available ? "visible" : "hidden";
+    return;
+  }
   gsap.to(button, {
     autoAlpha: available ? 1 : 0,
     scale: near ? 1.08 : 0.88,
@@ -661,6 +809,7 @@ function setScrollControlState(button, available, near, direction) {
 
 function runAnimations(localizedContent) {
   resetAnimationState();
+  state.animationLayout = initialAnimationLayout();
   initScroll({
     reducedMotion: reducedMotion.matches,
     onFrame: updateScrollControls,
@@ -669,7 +818,7 @@ function runAnimations(localizedContent) {
     root: document,
     localizedContent,
     reducedMotion,
-    isMobileLayout,
+    animationLayout: state.animationLayout,
     centerScrollPosition: targetScrollPosition,
     scrollToCard: scrollToTarget,
     updateScrollControls,

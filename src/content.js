@@ -42,7 +42,7 @@ export const content = {
         },
         {
           title: "3. Berechnung durchführen",
-          body: "Parser prüfen die Eingabe, das Modul erzeugt nachvollziehbare Ergebnisse.",
+          body: "Parser prüfen die Eingabe, das Modul erzeugt die Ergebnisse.",
         },
         {
           title: "4. Ergebnis nutzen",
@@ -109,10 +109,10 @@ profile = "traceable"`,
       body:
         "T00L ist als gemeinsame Oberfläche für weitere Berechnungen gedacht: neue Templates, Parser, Ergebnisformate und Vorschauen können als Module folgen.",
       cards: [
-        "Weitere Engineering-Templates",
+        "Weitere Templates als Module",
         "Modulare Parser und Validierung",
-        "Neue Ergebnisansichten",
-        "Mehr Beispiele als Startpunkt",
+        "Verbesserung der UI/UX",
+        "Beispiele als Startpunkt",
       ],
     },
     footer: {
@@ -166,7 +166,7 @@ profile = "traceable"`,
         },
         {
           title: "3. Run calculation",
-          body: "Parsers validate the input, then the module creates traceable results.",
+          body: "Parsers validate the input, then the module creates results.",
         },
         {
           title: "4. Use output",
@@ -233,10 +233,10 @@ profile = "traceable"`,
       body:
         "T00L is designed as a shared surface for more calculations: new templates, parsers, result formats, and previews can follow as modules.",
       cards: [
-        "More engineering templates",
+        "More modules as templates",
         "Modular parsers and validation",
-        "New result views",
-        "More examples as starting points",
+        "Improvement of UI/UX",
+        "Examples as starting points",
       ],
     },
     footer: {
