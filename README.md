@@ -19,8 +19,12 @@ The page explains the concept with **Volumina** as the first example module. Vol
 website/
   index.html              Static HTML shell and SEO metadata
   public/assets/          Public images and icons
+  src/animations/         GSAP timelines split by page area and animation concern
   src/content.js          German and English page copy
-  src/main.js             Rendering, warmup, scroll, and GSAP behavior
+  src/lib/                Shared DOM, HTML, and viewport-layout helpers
+  src/main.js             Page lifecycle, warmup, scroll controls, and orchestration
+  src/render/             DOM builders for header, hero, sections, footer, and controls
+  src/services/           Shared GSAP and Lenis services
   src/site-config.js      Public configuration values
   src/styles.css          Layout, themes, responsive design, and animation styles
 ```
